@@ -94,6 +94,7 @@ VALUES
 	('*code/code*', 2, 4, NULL, NULL, '*/www/nrgsourcecode*', NULL, false, NULL),
 	('*code/code*', 2, 5, NULL, NULL, '*/www/work_log*', NULL, false, NULL),
 	(NULL, NULL, NULL, NULL, NULL, NULL, '*facebook*', true, NULL),
+	(NULL, NULL, NULL, NULL, NULL, NULL, '*chrome://newtab/*', true, NULL),
 	(NULL, NULL, NULL, NULL, NULL, NULL, '*youtube.com*', true, NULL),
 	(NULL, NULL, NULL, NULL, NULL, NULL, '*mail.google.com*', true, NULL),
 	(NULL, 9, 1, NULL, NULL, NULL, '*redrox.local*', false, NULL),

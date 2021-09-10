@@ -1,6 +1,6 @@
 <?php
 
-	$sleep_duration = 0.5;
+	$sleep_duration = 3;
 
 	while (true) {
 
