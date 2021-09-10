@@ -1,6 +1,6 @@
 <?php
 
-	$sleep_duration = 1;
+	$sleep_duration = 0.5;
 
 	while (true) {
 
@@ -14,11 +14,18 @@
         }
 
 		$date = date('Y-m-d');
-		$application_id = null;
 		$application_path = null;
-		$window_title = 'null';
-		$file_path = 'null';
-		$window_url = 'null';
+        $application_id = null;
+        $window_details = [
+            'application_id' => null,
+            'activity_id' => null,
+            'project_id' => null,
+            'task_id' => null,
+            'window_title' => null,
+            'file_path' => null,
+            'window_url' => null
+        ];
+
 		$window_detail_id = null;
         $settings_path = __DIR__ . '/settings.json';
 
@@ -56,10 +63,19 @@
                 }
             }
         }
+        $window_details['application_id'] = $application_id;
 
-        if (!$patterns_set) {
-            $connection->close();
-            continue;
+        $patterns = [];
+        $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
+        $resource = $connection->query($sql);
+        if ($resource->num_rows) {
+            while($row = $resource->fetch_assoc()) {
+                $pattern = $row;
+                if (value_matched($application_path, $pattern['application_path'])) {
+                    $pattern['application_id'] = $application_id;
+                    $patterns[] = $pattern;
+                }
+            }
         }
 
         $window_title = trim(exec("xdotool getwindowname $active_window_id"));
@@ -67,8 +83,7 @@
         if ($first_letter == '●' || $first_letter == '*') {
             $window_title = trim(mb_substr($window_title, 1));
         }
-        $window_title = "'" . $connection->real_escape_string($window_title) . "'";
-        $process_information = [];
+        $window_details['window_title'] = $window_title;
 
         if (strpos($application_path, 'chrome/chrome')) {
             $active_tab_info = exec('bt active');
@@ -79,32 +94,56 @@
             foreach ($tab_list as $tab_info) {
                 $tab_array = explode("\t", $tab_info);
                 if ($tab_array[0] == $active_tab_id) {
-                    $window_url = "'" . $connection->real_escape_string($tab_array[2]) . "'";
-                    $patterns = [
-                        'mail.google.com',
-                        'youtube.com',
-                        'facebook.com',
-                        'redrox.local',
-                        'nrgsourcecode.atlassian.net'
-                    ];
-                    foreach ($patterns as $pattern) {
-                        if (strpos($window_url, $pattern)) {
-                            $window_url = "'*$pattern*'";
-                            $window_title = $window_url;
-                        }
+                    $window_url = $tab_array[2];
+                    $window_url = explode('&', $window_url)[0];
+                    $window_details['window_url'] = $window_url;
+                }
+            }
+        } else if (strpos($application_path, 'code/code')) {
+            // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
+            $title_array = explode(' • ', $window_title);
+            $window_details['file_path']  = $title_array[0];
+
+        }
+
+        foreach ($patterns as $pattern) {
+            if (pattern_matched($window_details, $pattern)) {
+                foreach ($window_details as $field => $value) {
+                    $pattern_value = $pattern[$field];
+                    if (!is_null($pattern_value) || $pattern['override_matched_details']) {
+                        $window_details[$field] = $pattern_value;
                     }
                 }
+                break;
             }
         }
 
-        $sql = "SELECT * FROM window_details WHERE application_id = $application_id AND " . ($window_url == 'null' ? "window_title = $window_title" : "window_url = $window_url");
+        $sql = "SELECT * FROM window_details WHERE ";
+        $insert_fields_sql = '';
+        $insert_values_sql = '';
+        $counter = 0;
+        foreach ($window_details as $field => $value) {
+            if (is_null($value)) {
+                $value = 'null';
+            } else {
+                if (is_string($value)) {
+                    $value = "'" . $connection->real_escape_string($value) . "'";
+                }
+                $sql .= ($counter ? ' AND ' : '') . $field . ' = ' . $value;
+                $insert_fields_sql .= ($counter ? ', ' : '') . $field;
+                $insert_values_sql .= ($counter ? ', ' : '') . $value;
+                $counter ++;
+            }
+            $window_details[$field] = $value;
+        }
+
         $resource = $connection->query($sql);
         if ($resource->num_rows) {
             while($row = $resource->fetch_assoc()) {
                 $window_detail_id = $row['id'];
             }
         } else {
-            $sql = "INSERT INTO window_details(`application_id`, `window_title`, `window_url`) VALUES ($application_id, $window_title, $window_url)";
+            $sql = "INSERT INTO window_details($insert_fields_sql) VALUES ($insert_values_sql)";
             $connection->query($sql);
             $window_detail_id = $connection->insert_id;
         }
@@ -123,5 +162,59 @@
 
 		$connection->close();
     }
+
+    function pattern_matched($window_details, $pattern) {
+        $result = true;
+        foreach ($window_details as $field => $value) {
+            if (strpos($field, '_id') === false) {
+                $result = $result && value_matched($value, $pattern[$field]);
+                if (!$result) {
+                    break;
+                }
+            }
+        }
+        return $result;
+
+    }
+
+    function value_matched($match_value, $pattern_value) {
+
+
+        if (is_null($pattern_value)) {
+            return true;
+        }
+
+        if (is_null($match_value)) {
+            return false;
+        }
+
+        $result = true;
+        $match_left = substr($pattern_value, 0, 1) != '*';
+        if (!$match_left) {
+            $pattern_value = substr($pattern_value, 1);
+        }
+        $match_right = substr($pattern_value, -1,) != '*';
+        if (!$match_right) {
+            $pattern_value = substr($pattern_value, 0, -1);
+        }
+        $match_any = !$match_left && !$match_right;
+
+        $pattern_index = strpos($match_value, $pattern_value);
+
+        if ($match_any) {
+            $result = $result && $pattern_index !== false;
+        } else {
+            if ($match_left) {
+                $result = $result && $pattern_index === 0;
+            }
+
+            if ($match_right) {
+                $result = $result && strrpos($match_value, $pattern_value) == strlen($match_value) - strlen($pattern_value);
+            }
+        }
+
+        return $result;
+    }
+
 
 ?>
