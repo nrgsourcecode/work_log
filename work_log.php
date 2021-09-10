@@ -110,7 +110,7 @@
             if (pattern_matched($window_details, $pattern)) {
                 foreach ($window_details as $field => $value) {
                     $pattern_value = $pattern[$field];
-                    if (!is_null($pattern_value) || $pattern['override_matched_details']) {
+                    if (is_null($value) || $pattern['override_matched_details']) {
                         $window_details[$field] = $pattern_value;
                     }
                 }
