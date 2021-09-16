@@ -93,16 +93,18 @@ VALUES
 	('*code/code*', 2, 3, NULL, NULL, '*/www/zelimbrak*', NULL, false, NULL),
 	('*code/code*', 2, 4, NULL, NULL, '*/www/nrgsourcecode*', NULL, false, NULL),
 	('*code/code*', 2, 5, NULL, NULL, '*/www/work_log*', NULL, false, NULL),
-	(NULL, NULL, NULL, NULL, NULL, NULL, '*facebook*', true, NULL),
-	(NULL, NULL, NULL, NULL, NULL, NULL, '*chrome://newtab/*', true, NULL),
-	(NULL, NULL, NULL, NULL, NULL, NULL, '*youtube.com*', true, NULL),
-	(NULL, NULL, NULL, NULL, NULL, NULL, '*mail.google.com*', true, NULL),
+	('/usr/bin/nautilus', 1, NULL, NULL, NULL, NULL, NULL, false, NULL),
+	(NULL, 1, NULL, NULL, NULL, NULL, '*linkedin.com*', true, NULL),
+	(NULL, 1, NULL, NULL, NULL, NULL, '*facebook*', true, NULL),
+	(NULL, 1, NULL, NULL, NULL, NULL, '*chrome://newtab/*', true, NULL),
+	(NULL, 1, NULL, NULL, NULL, NULL, '*youtube.com*', true, NULL),
+	(NULL, 1, NULL, NULL, NULL, NULL, '*mail.google.com*', true, NULL),
 	(NULL, 9, 1, NULL, NULL, NULL, '*redrox.local*', false, NULL),
 	(NULL, 4, 1, NULL, NULL, NULL, '*nrgsourcecode.atlassian.net*', false, NULL);
 
 CREATE TABLE `window_details` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `application_id` INTEGER NOT NULL,
+    `application_id` INTEGER NULL,
     `activity_id` INTEGER NULL,
     `project_id` INTEGER NULL,
     `task_id` INTEGER NULL,

@@ -9,9 +9,7 @@
         $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
 		$idle_milliseconds = exec('xprintidle');
 
-        if ($idle_milliseconds > 30000 || $active_window_handle == '0x0') {
-            continue;
-        }
+        $idle = $idle_milliseconds > 30000 || $active_window_handle == '0x0';
 
 		$date = date('Y-m-d');
 		$application_path = null;
@@ -34,87 +32,87 @@
 		extract($settings);
 		$connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
 
-        $result_code = null;
-        $output_array = [];
+        if ($idle) {
+            $window_details['activity_id'] = 1;
+            $window_details['window_title'] = 'COMPUTER_IS_IDLE';
+        } else {
+            $active_window_id = exec('xdotool getactivewindow');
+            $active_process_id = exec("xdotool getwindowpid $active_window_id");
 
-		$idle_milliseconds = exec('xprintidle');
+            exec("ps aux | grep $active_process_id", $process_information);
+            foreach ($process_information as $line) {
+                $line = preg_replace('!\s+!', ' ', $line);
+                $line_array = explode(' ', $line);
+                if ($line_array[1] == $active_process_id) {
+                    $active_process_info = $line;
+                    $application_path = $line_array[10];
 
-        $active_window_id = exec('xdotool getactivewindow');
-        $active_process_id = exec("xdotool getwindowpid $active_window_id");
-
-        exec("ps aux | grep $active_process_id", $process_information);
-        foreach ($process_information as $line) {
-            $line = preg_replace('!\s+!', ' ', $line);
-            $line_array = explode(' ', $line);
-            if ($line_array[1] == $active_process_id) {
-                $active_process_info = $line;
-                $application_path = $line_array[10];
-
-                $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
-                $resource = $connection->query($sql);
-                if ($resource->num_rows) {
-                    while($row = $resource->fetch_assoc()) {
-                        $application_id = $row['id'];
-                    }
-                } else {
-                    $sql = "INSERT INTO applications(`path`) VALUES ('$application_path')";
-                    $connection->query($sql);
-                    $application_id = $connection->insert_id;
-                }
-            }
-        }
-        $window_details['application_id'] = $application_id;
-
-        $patterns = [];
-        $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
-        $resource = $connection->query($sql);
-        if ($resource->num_rows) {
-            while($row = $resource->fetch_assoc()) {
-                $pattern = $row;
-                if (value_matched($application_path, $pattern['application_path'])) {
-                    $pattern['application_id'] = $application_id;
-                    $patterns[] = $pattern;
-                }
-            }
-        }
-
-        $window_title = trim(exec("xdotool getwindowname $active_window_id"));
-        $first_letter = mb_substr($window_title, 0, 1);
-        if ($first_letter == '●' || $first_letter == '*') {
-            $window_title = trim(mb_substr($window_title, 1));
-        }
-        $window_details['window_title'] = $window_title;
-
-        if (strpos($application_path, 'chrome/chrome')) {
-            $active_tab_info = exec('bt active');
-            $active_tab_array = explode("\t", $active_tab_info);
-            $active_tab_id = $active_tab_array[0];
-            $tab_list = [];
-            exec('bt list', $tab_list);
-            foreach ($tab_list as $tab_info) {
-                $tab_array = explode("\t", $tab_info);
-                if ($tab_array[0] == $active_tab_id) {
-                    $window_url = $tab_array[2];
-                    $window_url = explode('&', $window_url)[0];
-                    $window_details['window_url'] = $window_url;
-                }
-            }
-        } else if (strpos($application_path, 'code/code')) {
-            // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
-            $title_array = explode(' • ', $window_title);
-            $window_details['file_path']  = $title_array[0];
-
-        }
-
-        foreach ($patterns as $pattern) {
-            if (pattern_matched($window_details, $pattern)) {
-                foreach ($window_details as $field => $value) {
-                    $pattern_value = $pattern[$field];
-                    if (is_null($value) || $pattern['override_matched_details']) {
-                        $window_details[$field] = $pattern_value;
+                    $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
+                    $resource = $connection->query($sql);
+                    if ($resource->num_rows) {
+                        while($row = $resource->fetch_assoc()) {
+                            $application_id = $row['id'];
+                        }
+                    } else {
+                        $sql = "INSERT INTO applications(`path`) VALUES ('$application_path')";
+                        $connection->query($sql);
+                        $application_id = $connection->insert_id;
                     }
                 }
-                break;
+            }
+            $window_details['application_id'] = $application_id;
+
+            $patterns = [];
+            $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
+            $resource = $connection->query($sql);
+            if ($resource->num_rows) {
+                while($row = $resource->fetch_assoc()) {
+                    $pattern = $row;
+                    if (value_matched($application_path, $pattern['application_path'])) {
+                        $pattern['application_id'] = $application_id;
+                        $patterns[] = $pattern;
+                    }
+                }
+            }
+
+            $window_title = trim(exec("xdotool getwindowname $active_window_id"));
+            $first_letter = mb_substr($window_title, 0, 1);
+            if ($first_letter == '●' || $first_letter == '*') {
+                $window_title = trim(mb_substr($window_title, 1));
+            }
+            $window_details['window_title'] = $window_title;
+
+            if (strpos($application_path, 'chrome/chrome')) {
+                $active_tab_info = exec('bt active');
+                $active_tab_array = explode("\t", $active_tab_info);
+                $active_tab_id = $active_tab_array[0];
+                $tab_list = [];
+                exec('bt list', $tab_list);
+                foreach ($tab_list as $tab_info) {
+                    $tab_array = explode("\t", $tab_info);
+                    if ($tab_array[0] == $active_tab_id) {
+                        $window_url = $tab_array[2] || '';
+                        $window_url = explode('&', $window_url)[0];
+                        $window_details['window_url'] = $window_url;
+                    }
+                }
+            } else if (strpos($application_path, 'code/code')) {
+                // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
+                $title_array = explode(' • ', $window_title);
+                $window_details['file_path']  = $title_array[0];
+
+            }
+
+            foreach ($patterns as $pattern) {
+                if (pattern_matched($window_details, $pattern)) {
+                    foreach ($window_details as $field => $value) {
+                        $pattern_value = $pattern[$field];
+                        if (is_null($value) || $pattern['override_matched_details']) {
+                            $window_details[$field] = $pattern_value;
+                        }
+                    }
+                    break;
+                }
             }
         }
 
