@@ -121,7 +121,7 @@ CREATE TABLE `activity_log` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `window_detail_id` INTEGER NOT NULL,
     `date`  DATE DEFAULT (CURRENT_DATE),
-    `seconds` INTEGER DEFAULT 0,
+    `seconds` NUMERIC DEFAULT 0,
     UNIQUE KEY (`window_detail_id`, `date`),
     FOREIGN KEY (`window_detail_id`) REFERENCES `window_details` (`id`) ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=innodb DEFAULT CHARSET=utf8mb4;

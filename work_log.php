@@ -4,6 +4,8 @@
 
 	while (true) {
 
+        $start_time = microtime(true);
+
         sleep($sleep_duration);
 
         $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
@@ -83,6 +85,16 @@
             $window_details['window_title'] = $window_title;
 
             if (strpos($application_path, 'chrome/chrome')) {
+
+                $bt_clients = [];
+                exec('bt clients', $bt_clients);
+                foreach ($bt_clients as $bt_client) {
+                    if (strpos($bt_client, 'ERROR')) {
+                        $bt_client_info = explode("\t", $bt_client);
+                        $process_id = $bt_client_info[2];
+                        exec("kill $process_id");
+                    }
+                }
                 $active_tab_info = exec('bt active');
                 $active_tab_array = explode("\t", $active_tab_info);
                 $active_tab_id = $active_tab_array[0];
@@ -91,7 +103,7 @@
                 foreach ($tab_list as $tab_info) {
                     $tab_array = explode("\t", $tab_info);
                     if ($tab_array[0] == $active_tab_id) {
-                        $window_url = $tab_array[2] || '';
+                        $window_url = (count($tab_array) > 2 ? $tab_array[2] : '');
                         $window_url = explode('&', $window_url)[0];
                         $window_details['window_url'] = $window_url;
                     }
@@ -148,15 +160,17 @@
 
         $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
         $resource = $connection->query($sql);
+        $seconds_passed = microtime(true) - $start_time;
         if ($resource->num_rows) {
             while($row = $resource->fetch_assoc()) {
                 $id = $row['id'];
             }
-            $sql = "UPDATE activity_log SET `seconds` = `seconds` + $sleep_duration WHERE `id` = $id";
+            $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_passed WHERE `id` = $id";
         } else {
-            $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $sleep_duration)";
+            $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
         }
         $connection->query($sql);
+        echo $sql . "\n";
 
 		$connection->close();
     }
