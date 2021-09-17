@@ -175,11 +175,13 @@
             $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
         }
         $connection->query($sql);
-        echo date('Y-m-d H:i:s') . '.' . get_milliseconds() .
-            "\t\tSum of seconds passed: " . round($sum_seconds_passed, 3) .
-            "\tActual total seconds passed: " . round($actual_total_seconds_passed, 3) .
-            "\tDifference: " . round($actual_total_seconds_passed - $sum_seconds_passed, 3) .
-            "\tSeconds passed: " . round($seconds_passed, 3) . "\n";
+        /*
+            echo date('Y-m-d H:i:s') . '.' . get_milliseconds() .
+                "\t\tSum of seconds passed: " . round($sum_seconds_passed, 3) .
+                "\tActual total seconds passed: " . round($actual_total_seconds_passed, 3) .
+                "\tDifference: " . round($actual_total_seconds_passed - $sum_seconds_passed, 3) .
+                "\tSeconds passed: " . round($seconds_passed, 3) . "\n";
+        */
 
 		$connection->close();
     }
@@ -198,11 +200,13 @@
 
     }
 
-    function get_milliseconds()
-    {
-        $timestamp = microtime(true);
-        return (int)(($timestamp - (int)$timestamp) * 1000);
-    }
+    /*
+        function get_milliseconds()
+        {
+            $timestamp = microtime(true);
+            return (int)(($timestamp - (int)$timestamp) * 1000);
+        }
+    */
 
     function value_matched($match_value, $pattern_value) {
 
