@@ -52,14 +52,14 @@
                     $application_path = $line_array[10];
 
                     $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
-                    $resource = $connection->query($sql);
+                    $resource = query($connection, $sql);
                     if ($resource->num_rows) {
                         while($row = $resource->fetch_assoc()) {
                             $application_id = $row['id'];
                         }
                     } else {
                         $sql = "INSERT INTO applications(`path`) VALUES ('$application_path')";
-                        $connection->query($sql);
+                        query($connection, $sql);
                         $application_id = $connection->insert_id;
                     }
                 }
@@ -68,7 +68,7 @@
 
             $patterns = [];
             $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
-            $resource = $connection->query($sql);
+            $resource = query($connection, $sql);
             if ($resource->num_rows) {
                 while($row = $resource->fetch_assoc()) {
                     $pattern = $row;
@@ -149,19 +149,19 @@
             $window_details[$field] = $value;
         }
 
-        $resource = $connection->query($sql);
+        $resource = query($connection, $sql);
         if ($resource->num_rows) {
             while($row = $resource->fetch_assoc()) {
                 $window_detail_id = $row['id'];
             }
         } else {
             $sql = "INSERT INTO window_details($insert_fields_sql) VALUES ($insert_values_sql)";
-            $connection->query($sql);
+            query($connection, $sql);
             $window_detail_id = $connection->insert_id;
         }
 
         $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
-        $resource = $connection->query($sql);
+        $resource = query($connection, $sql);
         $microtime = microtime(true);
         $actual_total_seconds_passed = $microtime - $program_start_time;
         $seconds_passed = $microtime - $cycle_start_time;
@@ -174,7 +174,7 @@
         } else {
             $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
         }
-        $connection->query($sql);
+        query($connection, $sql);
         /*
             echo date('Y-m-d H:i:s') . '.' . get_milliseconds() .
                 "\t\tSum of seconds passed: " . round($sum_seconds_passed, 3) .
@@ -244,6 +244,20 @@
             }
         }
 
+        return $result;
+    }
+
+    function query($connection, $sql)
+    {
+
+        $result = $connection->query($sql);
+        $error = $connection->error;
+        if ($error) {
+            $log_path = __DIR__ . '/error.log';
+            file_put_contents($log_path, $error);
+            exec("gedit '$log_path'");
+            die;
+        }
         return $result;
     }
 
