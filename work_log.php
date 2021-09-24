@@ -13,7 +13,11 @@
         $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
 		$idle_milliseconds = exec('xprintidle');
 
-        $idle = $idle_milliseconds > 60000 || $active_window_handle == '0x0';
+        $settings_path = __DIR__ . '/settings.json';
+		$settings = json_decode(file_get_contents($settings_path), true);
+		extract($settings);
+
+        $idle = $idle_milliseconds > ($idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
 
 		$date = date('Y-m-d');
 		$application_path = null;
@@ -29,11 +33,7 @@
         ];
 
 		$window_detail_id = null;
-        $settings_path = __DIR__ . '/settings.json';
 
-		$settings = json_decode(file_get_contents($settings_path), true);
-
-		extract($settings);
 		$connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
 
         if ($idle) {
@@ -183,12 +183,6 @@
             $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
         }
         query($connection, $sql);
-            echo date('Y-m-d H:i:s') . '.' . get_milliseconds() .
-                "\t\tSum of seconds passed: " . round($sum_seconds_passed, 3) .
-                "\tActual total seconds passed: " . round($actual_total_seconds_passed, 3) .
-                "\tDifference: " . round($actual_total_seconds_passed - $sum_seconds_passed, 3) .
-                "\tSeconds passed: " . round($seconds_passed, 3) . "\n\n";
-
 		$connection->close();
     }
 
@@ -205,12 +199,6 @@
         return $result;
 
     }
-
-        function get_milliseconds()
-        {
-            $timestamp = microtime(true);
-            return (int)(($timestamp - (int)$timestamp) * 1000);
-        }
 
     function value_matched($match_value, $pattern_value) {
 
@@ -253,7 +241,6 @@
 
     function query($connection, $sql)
     {
-        echo $sql . "\n\n";
         $result = $connection->query($sql);
         $error = $connection->error;
         if ($error) {
