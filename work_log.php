@@ -13,7 +13,7 @@
         $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
 		$idle_milliseconds = exec('xprintidle');
 
-        $idle = $idle_milliseconds > 30000 || $active_window_handle == '0x0';
+        $idle = $idle_milliseconds > 60000 || $active_window_handle == '0x0';
 
 		$date = date('Y-m-d');
 		$application_path = null;
@@ -43,6 +43,7 @@
             $active_window_id = exec('xdotool getactivewindow');
             $active_process_id = exec("xdotool getwindowpid $active_window_id");
 
+            $process_information = [];
             exec("ps aux | grep $active_process_id", $process_information);
             foreach ($process_information as $line) {
                 $line = preg_replace('!\s+!', ' ', $line);
@@ -134,14 +135,21 @@
         $insert_fields_sql = '';
         $insert_values_sql = '';
         $counter = 0;
+        $search_counter = 0;
         foreach ($window_details as $field => $value) {
             if (is_null($value)) {
                 $value = 'null';
             } else {
-                if (is_string($value)) {
+                if (is_string($value) && !is_numeric($value)) {
                     $value = "'" . $connection->real_escape_string($value) . "'";
                 }
-                $sql .= ($counter ? ' AND ' : '') . $field . ' = ' . $value;
+
+                if (strpos($field, '_id') === false) {
+
+                    $sql .= ($search_counter ? ' AND ' : '') . $field . ' = ' . $value;
+                    $search_counter ++;
+                }
+
                 $insert_fields_sql .= ($counter ? ', ' : '') . $field;
                 $insert_values_sql .= ($counter ? ', ' : '') . $value;
                 $counter ++;
@@ -164,7 +172,7 @@
         $resource = query($connection, $sql);
         $microtime = microtime(true);
         $actual_total_seconds_passed = $microtime - $program_start_time;
-        $seconds_passed = $microtime - $cycle_start_time;
+        $seconds_passed = round($microtime - $cycle_start_time, 3);
         $sum_seconds_passed += $seconds_passed;
         if ($resource->num_rows) {
             while($row = $resource->fetch_assoc()) {
@@ -175,13 +183,11 @@
             $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
         }
         query($connection, $sql);
-        /*
             echo date('Y-m-d H:i:s') . '.' . get_milliseconds() .
                 "\t\tSum of seconds passed: " . round($sum_seconds_passed, 3) .
                 "\tActual total seconds passed: " . round($actual_total_seconds_passed, 3) .
                 "\tDifference: " . round($actual_total_seconds_passed - $sum_seconds_passed, 3) .
-                "\tSeconds passed: " . round($seconds_passed, 3) . "\n";
-        */
+                "\tSeconds passed: " . round($seconds_passed, 3) . "\n\n";
 
 		$connection->close();
     }
@@ -200,13 +206,11 @@
 
     }
 
-    /*
         function get_milliseconds()
         {
             $timestamp = microtime(true);
             return (int)(($timestamp - (int)$timestamp) * 1000);
         }
-    */
 
     function value_matched($match_value, $pattern_value) {
 
@@ -249,7 +253,7 @@
 
     function query($connection, $sql)
     {
-
+        echo $sql . "\n\n";
         $result = $connection->query($sql);
         $error = $connection->error;
         if ($error) {
