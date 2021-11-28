@@ -85,6 +85,14 @@
             if ($first_letter == '●' || $first_letter == '*') {
                 $window_title = trim(mb_substr($window_title, 1));
             }
+
+            if (strpos($application_path, 'dbeaver')) {
+                $dash_position = strpos($window_title, ' - ');
+                if ($dash_position) {
+                    $window_title = 'DBeaver' . substr($window_title, $dash_position);
+                }
+            }
+
             $window_details['window_title'] = $window_title;
 
             if (strpos($application_path, 'chrome/chrome')) {
