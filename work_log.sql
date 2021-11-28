@@ -48,7 +48,10 @@ VALUES
 	('Antalex Projects', 2),
 	('Želim Brak', 3),
 	('NRG SOURCE CODE Website', 3),
-	('Work Log', 3);
+	('Work Log', 3),
+    ('Shy Naturals', 3),
+    ('Sledeći Polazak', 3),
+    ('Dame Biraju', 3);
 
 CREATE TABLE `tasks` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
