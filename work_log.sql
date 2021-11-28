@@ -37,21 +37,22 @@ CREATE TABLE `projects` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `client_id` INTEGER NOT NULL,
     `name` VARCHAR(100),
+    `hourly_rate_euros` DECIMAL(10, 4),
     UNIQUE KEY (`client_id`, `name`),
     FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`) ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=innodb DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO
-    `projects` (`name`, `client_id`)
+    `projects` (`client_id`, `name`)
 VALUES
-    ('Redrox ERP', 1),
-	('Antalex Projects', 2),
-	('Želim Brak', 3),
-	('NRG SOURCE CODE Website', 3),
-	('Work Log', 3),
-    ('Shy Naturals', 3),
-    ('Sledeći Polazak', 3),
-    ('Dame Biraju', 3);
+    (1, 'Redrox ERP', 10),
+	(2, 'Antalex Projects', 16.25),
+	(3, 'Želim Brak', 0),
+	(3, 'NRG SOURCE CODE Website', 0),
+	(3, 'Work Log', 0),
+    (3, 'Shy Naturals', 0),
+    (3, 'Sledeći Polazak', 0),
+    (3, 'Dame Biraju', 0);
 
 CREATE TABLE `tasks` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
