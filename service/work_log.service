@@ -1,0 +1,16 @@
+[Unit]
+Description=Your Daemon
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+
+StartLimitIntervalSec=3600
+StartLimitBurst=720
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+
+ExecStart=/usr/bin/php /var/www/work_log/work_log.php
+
+[Install]
+WantedBy=multi-user.target
