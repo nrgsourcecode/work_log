@@ -11,4 +11,4 @@ RestartSec=5s
 ExecStart=/usr/bin/php /var/www/work_log/work_log.php
 
 [Install]
-WantedBy=graphical.target
+WantedBy=default.target
