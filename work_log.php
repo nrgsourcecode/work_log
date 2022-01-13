@@ -4,6 +4,8 @@
     $sum_seconds_passed = 0;
     $program_start_time = microtime(true);
 
+    sleep($sleep_duration);
+
     while (true) {
         $cycle_start_time = microtime(true);
 
