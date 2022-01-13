@@ -1,26 +1,25 @@
 <?php
 
-	$sleep_duration = 3;
+    $sleep_duration = 3;
     $sum_seconds_passed = 0;
     $program_start_time = microtime(true);
 
-	while (true) {
-
+    while (true) {
         $cycle_start_time = microtime(true);
 
         sleep($sleep_duration);
 
         $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
-		$idle_milliseconds = exec('xprintidle');
+        $idle_milliseconds = exec('xprintidle');
 
         $settings_path = __DIR__ . '/settings.json';
-		$settings = json_decode(file_get_contents($settings_path), true);
-		extract($settings);
+        $settings = json_decode(file_get_contents($settings_path), true);
+        extract($settings);
 
         $idle = $idle_milliseconds > ($idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
 
-		$date = date('Y-m-d');
-		$application_path = null;
+        $date = date('Y-m-d');
+        $application_path = null;
         $application_id = null;
         $window_details = [
             'application_id' => null,
@@ -32,15 +31,18 @@
             'window_url' => null
         ];
 
-		$window_detail_id = null;
+        $window_detail_id = null;
 
-		$connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
+        $connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
 
         if ($idle) {
             $window_details['activity_id'] = 1;
             $window_details['window_title'] = 'COMPUTER_IS_IDLE';
         } else {
             $active_window_id = exec('xdotool getactivewindow');
+            if (!$active_window_id) {
+                continue;
+            }
             $active_process_id = exec("xdotool getwindowpid $active_window_id");
 
             $process_information = [];
@@ -55,7 +57,7 @@
                     $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
                     $resource = query($connection, $sql);
                     if ($resource->num_rows) {
-                        while($row = $resource->fetch_assoc()) {
+                        while ($row = $resource->fetch_assoc()) {
                             $application_id = $row['id'];
                         }
                     } else {
@@ -71,7 +73,7 @@
             $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
             $resource = query($connection, $sql);
             if ($resource->num_rows) {
-                while($row = $resource->fetch_assoc()) {
+                while ($row = $resource->fetch_assoc()) {
                     $pattern = $row;
                     if (value_matched($application_path, $pattern['application_path'])) {
                         $pattern['application_id'] = $application_id;
@@ -96,7 +98,6 @@
             $window_details['window_title'] = $window_title;
 
             if (strpos($application_path, 'chrome/chrome')) {
-
                 $bt_clients = [];
                 exec('bt clients', $bt_clients);
                 foreach ($bt_clients as $bt_client) {
@@ -119,11 +120,10 @@
                         $window_details['window_url'] = $window_url;
                     }
                 }
-            } else if (strpos($application_path, 'code/code')) {
+            } elseif (strpos($application_path, 'code/code')) {
                 // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
                 $title_array = explode(' • ', $window_title);
                 $window_details['file_path']  = $title_array[0];
-
             }
 
             foreach ($patterns as $pattern) {
@@ -153,7 +153,6 @@
                 }
 
                 if (strpos($field, '_id') === false) {
-
                     $sql .= ($search_counter ? ' AND ' : '') . $field . ' = ' . $value;
                     $search_counter ++;
                 }
@@ -167,7 +166,7 @@
 
         $resource = query($connection, $sql);
         if ($resource->num_rows) {
-            while($row = $resource->fetch_assoc()) {
+            while ($row = $resource->fetch_assoc()) {
                 $window_detail_id = $row['id'];
             }
         } else {
@@ -183,7 +182,7 @@
         $seconds_passed = round($microtime - $cycle_start_time, 3);
         $sum_seconds_passed += $seconds_passed;
         if ($resource->num_rows) {
-            while($row = $resource->fetch_assoc()) {
+            while ($row = $resource->fetch_assoc()) {
                 $id = $row['id'];
             }
             $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_passed WHERE `id` = $id";
@@ -191,10 +190,11 @@
             $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
         }
         query($connection, $sql);
-		$connection->close();
+        $connection->close();
     }
 
-    function pattern_matched($window_details, $pattern) {
+    function pattern_matched($window_details, $pattern)
+    {
         $result = true;
         foreach ($window_details as $field => $value) {
             if (strpos($field, '_id') === false) {
@@ -205,12 +205,10 @@
             }
         }
         return $result;
-
     }
 
-    function value_matched($match_value, $pattern_value) {
-
-
+    function value_matched($match_value, $pattern_value)
+    {
         if (is_null($pattern_value)) {
             return true;
         }
@@ -224,7 +222,7 @@
         if (!$match_left) {
             $pattern_value = substr($pattern_value, 1);
         }
-        $match_right = substr($pattern_value, -1,) != '*';
+        $match_right = substr($pattern_value, -1, ) != '*';
         if (!$match_right) {
             $pattern_value = substr($pattern_value, 0, -1);
         }
@@ -259,6 +257,3 @@
         }
         return $result;
     }
-
-
-?>
