@@ -130,3 +130,36 @@ CREATE TABLE `activity_log` (
     FOREIGN KEY (`window_detail_id`) REFERENCES `window_details` (`id`) ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=innodb DEFAULT CHARSET=utf8mb4;
 
+CREATE OR REPLACE VIEW base_view_detailed AS
+SELECT
+    al.date AS date,
+    wd.project_id AS project_id,
+    al.seconds,
+    IF(wd.activity_id = 10, 0, al.seconds) AS seconds_in_the_office,
+    IF(p.client_id <> 3, al.seconds, 0) AS seconds_worked,
+    IF(wd.project_id <> 12 OR wd.activity_id = 2 OR wd.activity_id = 9, al.seconds, 0) AS billable_seconds,
+    IF(wd.project_id <> 12 OR wd.activity_id = 2 OR wd.activity_id = 9, al.seconds / 3600 * p.hourly_rate, 0) AS euros_earned
+FROM
+    window_details AS wd INNER JOIN
+    activity_log AS al ON wd.id = al.window_detail_id LEFT JOIN
+    projects AS p ON wd.project_id = p.id;
+
+CREATE OR REPLACE VIEW base_view_summary AS
+SELECT
+    bvd.`date`,
+	FLOOR(SUM(bvd.seconds_in_the_office)) AS seconds_in_the_office,
+	FLOOR(SUM(bvd.seconds)) AS seconds_total,
+	FLOOR(SUM(IF(bvd.project_id = 1, bvd.seconds, 0))) AS seconds_redrox,
+	FLOOR(SUM(IF(bvd.project_id = 2, bvd.seconds, 0))) AS seconds_dean,
+	FLOOR(SUM(IF(bvd.project_id = 12, bvd.billable_seconds, 0))) AS seconds_richard_coding,
+	FLOOR(SUM(IF(bvd.project_id = 12, bvd.seconds - bvd.billable_seconds, 0))) AS seconds_richard_research,
+	FLOOR(SUM(IF(bvd.project_id = 12, bvd.seconds, 0))) AS seconds_richard,
+	FLOOR(SUM(bvd.seconds_worked)) AS seconds_worked,
+	SUM(IF(bvd.project_id = 1, bvd.euros_earned, 0)) AS euros_earned_redrox,
+	SUM(IF(bvd.project_id = 2, bvd.euros_earned, 0)) AS euros_earned_dean,
+	SUM(IF(bvd.project_id = 12, bvd.euros_earned, 0)) AS euros_earned_richard,
+	SUM(bvd.euros_earned) AS euros_earned_total
+FROM
+    base_view_detailed bvd
+GROUP BY
+    bvd.`date`;
