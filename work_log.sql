@@ -37,13 +37,13 @@ CREATE TABLE `projects` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `client_id` INTEGER NOT NULL,
     `name` VARCHAR(100),
-    `hourly_rate_euros` DECIMAL(10, 4),
+    `hourly_rate` DECIMAL(10, 4),
     UNIQUE KEY (`client_id`, `name`),
     FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`) ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=innodb DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO
-    `projects` (`client_id`, `name`)
+    `projects` (`client_id`, `name`, `hourly_rate`)
 VALUES
     (1, 'Redrox ERP', 10),
 	(2, 'Antalex Projects', 16.25),
