@@ -4,6 +4,10 @@ $sleep_duration = 3;
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
 
+if (file_exists(log_file_path())) {
+    unlink(log_file_path());
+}
+
 sleep($sleep_duration);
 
 while (true) {
@@ -12,13 +16,18 @@ while (true) {
     sleep($sleep_duration);
 
     $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
+    log_to_file('active_window_handle', $active_window_handle);
     $idle_milliseconds = exec('xprintidle');
+    log_to_file('idle_milliseconds', $idle_milliseconds);
 
     $settings_path = __DIR__ . '/settings.json';
     $settings = json_decode(file_get_contents($settings_path), true);
     extract($settings);
 
-    $idle = $idle_milliseconds > ($idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
+    log_to_file('idle_timeout_seconds', $idle_timeout_seconds);
+
+    $idle = ($idle_milliseconds > $idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
+    log_to_file('idle', $idle);
 
     $date = date('Y-m-d');
     $application_path = null;
@@ -42,13 +51,18 @@ while (true) {
         $window_details['window_title'] = 'COMPUTER_IS_IDLE';
     } else {
         $active_window_id = exec('xdotool getactivewindow');
+        log_to_file('active_window_id', $active_window_id);
         if (!$active_window_id) {
             continue;
         }
         $active_process_id = exec("xdotool getwindowpid $active_window_id");
+        log_to_file('active_process_id', $active_process_id);
 
         $process_information = [];
         exec("ps aux | grep $active_process_id", $process_information);
+        log_to_file('process_information', $process_information);
+
+
         foreach ($process_information as $line) {
             $line = preg_replace('!\s+!', ' ', $line);
             $line_array = explode(' ', $line);
@@ -110,10 +124,12 @@ while (true) {
                 }
             }
             $active_tab_info = exec('bt active');
+            log_to_file('active_tab_info', $active_tab_info);
             $active_tab_array = explode("\t", $active_tab_info);
             $active_tab_id = $active_tab_array[0];
             $tab_list = [];
             exec('bt list', $tab_list);
+            log_to_file('tab_list', $tab_list);
             foreach ($tab_list as $tab_info) {
                 $tab_array = explode("\t", $tab_info);
                 if ($tab_array[0] == $active_tab_id) {
@@ -249,6 +265,7 @@ function value_matched($match_value, $pattern_value)
 
 function query($connection, $sql)
 {
+    log_to_file("sql", $sql);
     $result = $connection->query($sql);
     $error = $connection->error;
     if ($error) {
@@ -258,4 +275,21 @@ function query($connection, $sql)
         die;
     }
     return $result;
+}
+
+function log_file_path()
+{
+    return dirname(__FILE__) . '/query_log.txt';
+}
+
+function log_to_file($variable_name, $value)
+{
+    global $enable_logging;
+
+    if (!$enable_logging) {
+        return;
+    }
+
+    $output = (is_array($value) ? json_encode($value) : $value);
+    file_put_contents(log_file_path(), "\n\n$variable_name:\n$output", FILE_APPEND);
 }

@@ -1,3 +1,5 @@
 settings.json
 error.log
 database_backups
+query_log.txt
+.vscode
