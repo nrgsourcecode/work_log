@@ -3,6 +3,7 @@
 $sleep_duration = 3;
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
+exec('bt install');
 
 if (file_exists(log_file_path())) {
     unlink(log_file_path());
