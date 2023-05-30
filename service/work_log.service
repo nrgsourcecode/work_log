@@ -1,14 +1,11 @@
 [Unit]
-Description=Work Log
-After=graphical.target
-StartLimitIntervalSec=3600
-StartLimitBurst=720
+Description=Work Log Service
+After=graphical-session.target
 
 [Service]
-Environment="DISPLAY=:0"
-Restart=on-failure
-RestartSec=5s
+Type=simple
 ExecStart=/usr/bin/php /var/www/work_log/work_log.php
+Restart=on-failure
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
