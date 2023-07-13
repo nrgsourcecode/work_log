@@ -60,7 +60,6 @@ while (true) {
         exec("ps aux | grep $active_process_id", $process_information);
         log_to_file('process_information', $process_information);
 
-
         foreach ($process_information as $line) {
             $line = preg_replace('!\s+!', ' ', $line);
             $line_array = explode(' ', $line);
@@ -121,21 +120,42 @@ while (true) {
                     exec("kill $process_id");
                 }
             }
-            $active_tab_info = exec('bt active');
-            log_to_file('active_tab_info', $active_tab_info);
-            $active_tab_array = explode("\t", $active_tab_info);
-            $active_tab_id = $active_tab_array[0];
+            $active_tabs_info = [];
+            $active_tab_ids = [];
+            exec('bt active', $active_tabs_info);
+            log_to_file('active_tab_info', $active_tabs_info);
+
+            foreach ($active_tabs_info as $active_tab_info) {
+                $active_tab_array = explode("\t", $active_tab_info);
+                $active_tab_id = $active_tab_array[0];
+                $active_tab_ids[$active_tab_id] = $active_tab_id;
+            }
+            log_to_file('active_tab_ids', $active_tab_ids);
+
             $tab_list = [];
+            $confirmed = false;
+            $window_url = null;
             exec('bt list', $tab_list);
             log_to_file('tab_list', $tab_list);
             foreach ($tab_list as $tab_info) {
                 $tab_array = explode("\t", $tab_info);
-                if ($tab_array[0] == $active_tab_id) {
-                    $window_url = (count($tab_array) > 2 ? $tab_array[2] : '');
+                $tab_id = $tab_array[0];
+                $tab_title = $tab_array[1];
+                $tab_url = $tab_array[2] ?? null;
+                if ($tab_title == $window_title && !$confirmed) {
+                    $confirmed = isset($active_tab_ids[$tab_id]);
+                    $window_url = $tab_url;
                     $window_url = explode('&', $window_url)[0];
                     $window_details['window_url'] = $window_url;
                 }
             }
+
+            if (!$window_url) {
+                $window_details['window_title'] = 'PRIVATE_BROWSING';
+            }
+
+            log_to_file('window_details', $window_details);
+
         } elseif (strpos($application_path, 'code/code')) {
             // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
             $title_array = explode(' • ', $window_title);
