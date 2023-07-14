@@ -31,7 +31,10 @@ INSERT INTO
 VALUES
     ('Redrox Industrial Inc.'),
 	('Dean Bjelica'),
-	('NRG SOURCE CODE');
+	('NRG SOURCE CODE'),
+    ('Richard Valdez'),
+    ('Defying Gravity AG'),
+    ('SilverCut');
 
 CREATE TABLE `projects` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -52,7 +55,13 @@ VALUES
 	(3, 'Work Log', 0),
     (3, 'Shy Naturals', 0),
     (3, 'Sledeći Polazak', 0),
-    (3, 'Dame Biraju', 0);
+    (3, 'Dame Biraju', 0),
+    (3, 'Prijavi Prekršaj', 0),
+    (3, 'Elite Comments', 0),
+    (3, 'Mimovi', 0),
+    (4, 'QR Menu Maker', 28),
+    (5, 'Defying Gravity AG', 41),
+    (6, 'SilverCut', 19);
 
 CREATE TABLE `tasks` (
     `id` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -154,10 +163,12 @@ SELECT
 	FLOOR(SUM(IF(bvd.project_id = 12, bvd.billable_seconds, 0))) AS seconds_richard_coding,
 	FLOOR(SUM(IF(bvd.project_id = 12, bvd.seconds - bvd.billable_seconds, 0))) AS seconds_richard_research,
 	FLOOR(SUM(IF(bvd.project_id = 12, bvd.seconds, 0))) AS seconds_richard,
+	FLOOR(SUM(IF(bvd.project_id = 14, bvd.seconds, 0))) AS seconds_silvercut,
 	FLOOR(SUM(bvd.seconds_worked)) AS seconds_worked,
 	SUM(IF(bvd.project_id = 1, bvd.euros_earned, 0)) AS euros_earned_redrox,
 	SUM(IF(bvd.project_id = 2, bvd.euros_earned, 0)) AS euros_earned_dean,
 	SUM(IF(bvd.project_id = 12, bvd.euros_earned, 0)) AS euros_earned_richard,
+	SUM(IF(bvd.project_id = 14, bvd.euros_earned, 0)) AS euros_earned_silvercut,
 	SUM(bvd.euros_earned) AS euros_earned_total
 FROM
     base_view_detailed bvd
