@@ -253,7 +253,7 @@ function check_upwork($window_details)
 
     $theme_changed = set_theme($notification_text !== null);
 
-    if (!$notification_text && !$theme_changed) {
+    if (!$notification_text || !$theme_changed) {
         return;
     }
 
