@@ -5,5 +5,6 @@
     "DB_DATABASE": "work_log",
     "DB_USERNAME": "root",
     "DB_PASSWORD": null,
-    "enable_logging": false
+    "enable_logging": false,
+    "upwork_enabled_project_ids": []
 }

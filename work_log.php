@@ -9,6 +9,7 @@ if (file_exists(log_file_path())) {
 }
 
 while (true) {
+
     $cycle_start_time = microtime(true);
 
     sleep($sleep_duration);
@@ -108,7 +109,8 @@ while (true) {
             }
         }
 
-        $window_details['window_title'] = mb_substr($window_title, 0, 512);
+        $window_title = mb_substr($window_title, 0, 512);
+        $window_details['window_title'] = $window_title;
 
         if (strpos($application_path, 'chrome/chrome')) {
             $bt_clients = [];
@@ -142,7 +144,7 @@ while (true) {
                 $tab_id = $tab_array[0];
                 $tab_title = $tab_array[1];
                 $tab_url = $tab_array[2] ?? null;
-                if ($tab_title == $window_title && !$confirmed) {
+                if (mb_strpos($window_title, $tab_title) === 0 && !$confirmed) {
                     $confirmed = isset($active_tab_ids[$tab_id]);
                     $window_url = $tab_url;
                     $window_url = explode('&', $window_url)[0];
@@ -204,12 +206,15 @@ while (true) {
     if ($resource->num_rows) {
         while ($row = $resource->fetch_assoc()) {
             $window_detail_id = $row['id'];
+            $window_details['project_id'] = $row['project_id'];
         }
     } else {
         $sql = "INSERT INTO window_details($insert_fields_sql) VALUES ($insert_values_sql)";
         query($connection, $sql);
         $window_detail_id = $connection->insert_id;
     }
+
+    check_upwork($window_details);
 
     $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
     $resource = query($connection, $sql);
@@ -227,6 +232,48 @@ while (true) {
     }
     query($connection, $sql);
     $connection->close();
+}
+
+function check_upwork($window_details)
+{
+    global $upwork_enabled_project_ids;
+    $is_upwork_started = exec('ps aux | pgrep upwork') !== '';
+    $should_track_time = in_array($window_details['project_id'], $upwork_enabled_project_ids);
+    $notification_text = null;
+    $icon = null;
+    if ($should_track_time) {
+        if (!$is_upwork_started) {
+            $notification_text = 'Start upwork timer';
+            $icon = 'start';
+        }
+    } else if ($is_upwork_started) {
+        $notification_text = 'Stop upwork timer';
+        $icon = 'stop';
+    }
+
+    $theme_changed = set_theme($notification_text !== null);
+
+    if (!$notification_text && !$theme_changed) {
+        return;
+    }
+
+    notify($notification_text, $icon);
+}
+
+function set_theme($error = false)
+{
+    $command = 'gsettings get org.gnome.shell.extensions.user-theme name';
+    $current_theme = trim(exec($command), "'");
+
+    $new_theme = 'work-log-' . ($error ? 'error' : 'regular');
+
+    if ($current_theme === $new_theme) {
+        return false;
+    }
+    
+    $command = "gsettings set org.gnome.shell.extensions.user-theme name \"'$new_theme'\"";
+    exec($command);
+    return true;
 }
 
 function pattern_matched($window_details, $pattern)
@@ -287,12 +334,26 @@ function query($connection, $sql)
     $result = $connection->query($sql);
     $error = $connection->error;
     if ($error) {
-        $log_path = __DIR__ . '/error.log';
-        file_put_contents($log_path, $error);
-        exec("gedit '$log_path'");
-        die;
+        notify($error);
     }
     return $result;
+}
+
+function notify($text, $icon = null)
+{
+    $text = '"' . str_replace('"', '\"', $text) . '"';
+    $command = "notify-send -h int:transient:1";
+    if ($icon) {
+        $command .= " -i media-playback-$icon";
+    }
+    exec("$command $text &");
+
+    if (!$icon) {
+        return;
+    }
+    
+    $command = 'paplay /usr/share/sounds/freedesktop/stereo/' . ($icon == 'start' ? 'complete' : 'power-unplug') . '.oga &';
+    exec($command);
 }
 
 function log_file_path()
@@ -300,11 +361,11 @@ function log_file_path()
     return dirname(__FILE__) . '/query_log.txt';
 }
 
-function log_to_file($variable_name, $value)
+function log_to_file($variable_name, $value, $force = false)
 {
     global $enable_logging;
 
-    if (!$enable_logging) {
+    if (!$enable_logging && !$force) {
         return;
     }
 
