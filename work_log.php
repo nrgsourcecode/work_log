@@ -273,7 +273,7 @@ function is_time_tracked()
     }
 
     $control_panel_window_id = get_control_panel_window_id($upwork_process_id);
-    $command = "import -windowid $control_panel_window_id -crop 1x1+40+40 txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
+    $command = "import -silent -windowid $control_panel_window_id -crop 1x1+40+40 txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
     $toggle_color = exec($command);
     return $toggle_color === '#10108A8A0000';
 }
