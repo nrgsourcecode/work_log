@@ -3,9 +3,12 @@
 $sleep_duration = 3;
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
+$session_time_tracked = 0;
 
-if (file_exists(log_file_path())) {
-    unlink(log_file_path());
+$log_file_path = log_file_path();
+
+if (file_exists($log_file_path)) {
+    unlink($log_file_path);
 }
 
 while (true) {
@@ -184,37 +187,41 @@ while (true) {
     $search_counter = 0;
     foreach ($window_details as $field => $value) {
         if (is_null($value)) {
-            $value = 'null';
-        } else {
-            if (is_string($value) && !is_numeric($value)) {
-                $value = "'" . $connection->real_escape_string($value) . "'";
-            }
-
-            if (strpos($field, '_id') === false) {
-                $sql .= ($search_counter ? ' AND ' : '') . $field . ' = ' . $value;
-                $search_counter++;
-            }
-
-            $insert_fields_sql .= ($counter ? ', ' : '') . $field;
-            $insert_values_sql .= ($counter ? ', ' : '') . $value;
-            $counter++;
+            continue;
         }
-        $window_details[$field] = $value;
+        
+        if (is_string($value) && !is_numeric($value)) {
+            $value = "'" . $connection->real_escape_string($value) . "'";
+        }
+
+        if (strpos($field, '_id') === false) {
+            $sql .= ($search_counter ? ' AND ' : '') . $field . ' = ' . $value;
+            $search_counter++;
+        }
+
+        $insert_fields_sql .= ($counter ? ', ' : '') . $field;
+        $insert_values_sql .= ($counter ? ', ' : '') . $value;
+        $counter++;
     }
 
     $resource = query($connection, $sql);
     if ($resource->num_rows) {
-        while ($row = $resource->fetch_assoc()) {
-            $window_detail_id = $row['id'];
-            $window_details['project_id'] = $row['project_id'];
+        $row = $resource->fetch_assoc();
+        $window_detail_id = $row['id'];
+        foreach ($window_details as $field => $value) {
+            if (empty($value)) {
+                $row_value = $row[$field] ?? null;
+                if (!empty($row_value)) {
+                    $window_details[$field] = $row_value;
+                }
+            }
         }
     } else {
-        $sql = "INSERT INTO window_details($insert_fields_sql) VALUES ($insert_values_sql)";
+        $sql = "INSERT INTO window_details ($insert_fields_sql) VALUES ($insert_values_sql)";
         query($connection, $sql);
         $window_detail_id = $connection->insert_id;
     }
 
-    check_upwork($window_details);
 
     $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
     $resource = query($connection, $sql);
@@ -222,6 +229,8 @@ while (true) {
     $actual_total_seconds_passed = $microtime - $program_start_time;
     $seconds_passed = round($microtime - $cycle_start_time, 3);
     $sum_seconds_passed += $seconds_passed;
+    check_upwork($window_details['project_id'], $seconds_passed);
+
     if ($resource->num_rows) {
         while ($row = $resource->fetch_assoc()) {
             $id = $row['id'];
@@ -234,19 +243,63 @@ while (true) {
     $connection->close();
 }
 
-function check_upwork($window_details)
+function get_control_panel_window_id($upwork_process_id)
+{
+    $control_panel_window_ids = [];
+    $command = "xdotool search --name 'Control Panel'";
+    exec($command, $control_panel_window_ids);
+
+    if (count($control_panel_window_ids) > 1) {
+        $upwork_window_ids = [];
+        $command = "xdotool search --pid $upwork_process_id";
+        exec($command, $upwork_window_ids);
+
+        $control_panel_window_ids = array_intersect($control_panel_window_ids, $upwork_window_ids);
+    }
+
+    return array_pop($control_panel_window_ids);
+}
+
+function is_time_tracked()
+{
+
+    $upwork_processes = [];
+    $command = 'ps aux | pgrep upwork';
+    exec($command, $upwork_processes);
+
+    $upwork_process_id = $upwork_processes[0] ?? null;
+    if (!$upwork_process_id) {
+        return false;
+    }
+
+    $control_panel_window_id = get_control_panel_window_id($upwork_process_id);
+    $command = "import -windowid $control_panel_window_id -crop 1x1+40+40 txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
+    $toggle_color = exec($command);
+    return $toggle_color === '#10108A8A0000';
+}
+
+function check_upwork($project_id, $seconds_passed)
 {
     global $upwork_enabled_project_ids;
-    $is_upwork_started = exec('ps aux | pgrep upwork') !== '';
-    $should_track_time = in_array($window_details['project_id'], $upwork_enabled_project_ids);
+    global $session_time_tracked;
+
+    $should_track_time = in_array($project_id, $upwork_enabled_project_ids);
+    $is_time_tracked = is_time_tracked();
+
+    if ($is_time_tracked) {
+        $session_time_tracked += $seconds_passed;
+    } else {
+        $session_time_tracked = 0;
+    }
+
     $notification_text = null;
     $icon = null;
     if ($should_track_time) {
-        if (!$is_upwork_started) {
+        if (!$is_time_tracked) {
             $notification_text = 'Start upwork timer';
             $icon = 'start';
         }
-    } else if ($is_upwork_started) {
+    } else if ($is_time_tracked) {
         $notification_text = 'Stop upwork timer';
         $icon = 'stop';
     }
