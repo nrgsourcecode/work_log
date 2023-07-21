@@ -4,6 +4,7 @@ $sleep_duration = 3;
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
 $session_time_tracked = 0;
+$last_upwork_timer_notice_timestamp = 0;
 
 $log_file_path = log_file_path();
 
@@ -151,6 +152,7 @@ while (true) {
                     $confirmed = isset($active_tab_ids[$tab_id]);
                     $window_url = $tab_url;
                     $window_url = explode('&', $window_url)[0];
+                    $window_url = mb_substr($window_url, 0, 512);
                     $window_details['window_url'] = $window_url;
                 }
             }
@@ -243,26 +245,27 @@ while (true) {
     $connection->close();
 }
 
-function get_control_panel_window_id($upwork_process_id)
+function is_time_tracked_in_upwork_window($upwork_process_id, $title, $x, $y)
 {
     $control_panel_window_ids = [];
-    $command = "xdotool search --name 'Control Panel'";
+    $command = "xdotool search --name '$title'";
     exec($command, $control_panel_window_ids);
 
     if (count($control_panel_window_ids) > 1) {
         $upwork_window_ids = [];
         $command = "xdotool search --pid $upwork_process_id";
         exec($command, $upwork_window_ids);
-
         $control_panel_window_ids = array_intersect($control_panel_window_ids, $upwork_window_ids);
     }
 
-    return array_pop($control_panel_window_ids);
+    $window_id = array_pop($control_panel_window_ids);
+    $command = "import -silent -windowid $window_id -crop 1x1+$x+$y txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
+    $toggle_color = exec($command);
+    return $toggle_color === '#10108A8A0000';
 }
 
 function is_time_tracked()
 {
-
     $upwork_processes = [];
     $command = 'ps aux | pgrep upwork';
     exec($command, $upwork_processes);
@@ -272,28 +275,32 @@ function is_time_tracked()
         return false;
     }
 
-    $control_panel_window_id = get_control_panel_window_id($upwork_process_id);
-    $command = "import -silent -windowid $control_panel_window_id -crop 1x1+40+40 txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
-    $toggle_color = exec($command);
-    return $toggle_color === '#10108A8A0000';
+    $result =
+        is_time_tracked_in_upwork_window($upwork_process_id, 'Time Tracker', 305, 105) ||
+        is_time_tracked_in_upwork_window($upwork_process_id, 'Control Panel', 40, 40);
+
+    return $result;
 }
 
 function check_upwork($project_id, $seconds_passed)
 {
     global $upwork_enabled_project_ids;
     global $session_time_tracked;
+    global $last_upwork_timer_notice_timestamp;
 
     $should_track_time = in_array($project_id, $upwork_enabled_project_ids);
     $is_time_tracked = is_time_tracked();
 
     if ($is_time_tracked) {
-        $session_time_tracked += $seconds_passed;
+        $session_time_tracked += round($seconds_passed);
     } else {
         $session_time_tracked = 0;
     }
 
     $notification_text = null;
     $icon = null;
+    $subtitle = null;
+
     if ($should_track_time) {
         if (!$is_time_tracked) {
             $notification_text = 'Start upwork timer';
@@ -304,13 +311,34 @@ function check_upwork($project_id, $seconds_passed)
         $icon = 'stop';
     }
 
+    if ($is_time_tracked) {
+        $current_timestamp = microtime(true);
+        $show_upwork_timer_notice = substr(date('is'), 1, 2) === '90' && $current_timestamp - $last_upwork_timer_notice_timestamp > 30;
+
+        if ($show_upwork_timer_notice) {
+            $notification_text = 'Upwork timer will take screenshot soon';
+            $subtitle = 'Session time tracked is ' . format_time($session_time_tracked) . '.';
+            $last_upwork_timer_notice_timestamp = $current_timestamp;
+        }
+    }
+
     $theme_changed = set_theme($notification_text !== null);
 
     if (!$notification_text || !$theme_changed) {
         return;
     }
 
-    notify($notification_text, $icon);
+    notify($notification_text, $subtitle, $icon);
+}
+
+function format_time($seconds)
+{
+    $modulo = $seconds % 600;
+    $rounded_seconds = $seconds + ($modulo ? 600 - $modulo : 0);
+    $minutes = $rounded_seconds / 60 % 60;
+    $hours = floor($rounded_seconds / 3600);
+    
+    return sprintf('%02d:%02d:00', $hours, $minutes);
 }
 
 function set_theme($error = false)
@@ -392,14 +420,21 @@ function query($connection, $sql)
     return $result;
 }
 
-function notify($text, $icon = null)
+function notify($title, $subtitle = null, $icon = null)
 {
-    $text = '"' . str_replace('"', '\"', $text) . '"';
     $command = "notify-send -h int:transient:1";
+
     if ($icon) {
         $command .= " -i media-playback-$icon";
     }
-    exec("$command $text &");
+
+    $command .= ' "' . str_replace('"', '\"', $title) . '"';
+    if ($subtitle !== null) {
+        $command .= ' "' . str_replace('"', '\"', $subtitle) . '"';
+    }
+    $command .= ' &';
+
+    exec($command);
 
     if (!$icon) {
         return;
