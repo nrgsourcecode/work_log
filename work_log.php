@@ -1,6 +1,5 @@
 <?php
 
-$sleep_duration = 3;
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
 $session_time_tracked = 0;
@@ -16,21 +15,20 @@ while (true) {
 
     $cycle_start_time = microtime(true);
 
-    sleep($sleep_duration);
-
-    $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
-    log_to_file('active_window_handle', $active_window_handle);
-    $idle_milliseconds = exec('xprintidle');
-    log_to_file('idle_milliseconds', $idle_milliseconds);
-
+    // Read settings
     $settings_path = __DIR__ . '/settings.json';
     $settings = json_decode(file_get_contents($settings_path), true);
     extract($settings);
 
-    log_to_file('idle_timeout_seconds', $idle_timeout_seconds);
+    // Sleep before fetching data from the active application
+    sleep($refresh_interval);
+
+    // Get the active window
+    $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
+    $idle_milliseconds = exec('xprintidle');
+
 
     $idle = ($idle_milliseconds > $idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
-    log_to_file('idle', $idle);
 
     $date = date('Y-m-d');
     $application_path = null;
@@ -54,16 +52,13 @@ while (true) {
         $window_details['window_title'] = 'COMPUTER_IS_IDLE';
     } else {
         $active_window_id = exec('xdotool getactivewindow');
-        log_to_file('active_window_id', $active_window_id);
         if (!$active_window_id) {
             continue;
         }
         $active_process_id = exec("xdotool getwindowpid $active_window_id");
-        log_to_file('active_process_id', $active_process_id);
 
         $process_information = [];
         exec("ps aux | grep $active_process_id", $process_information);
-        log_to_file('process_information', $process_information);
 
         foreach ($process_information as $line) {
             $line = preg_replace('!\s+!', ' ', $line);
@@ -129,20 +124,17 @@ while (true) {
             $active_tabs_info = [];
             $active_tab_ids = [];
             exec('bt active', $active_tabs_info);
-            log_to_file('active_tab_info', $active_tabs_info);
 
             foreach ($active_tabs_info as $active_tab_info) {
                 $active_tab_array = explode("\t", $active_tab_info);
                 $active_tab_id = $active_tab_array[0];
                 $active_tab_ids[$active_tab_id] = $active_tab_id;
             }
-            log_to_file('active_tab_ids', $active_tab_ids);
 
             $tab_list = [];
             $confirmed = false;
             $window_url = null;
             exec('bt list', $tab_list);
-            log_to_file('tab_list', $tab_list);
             foreach ($tab_list as $tab_info) {
                 $tab_array = explode("\t", $tab_info);
                 $tab_id = $tab_array[0];
@@ -160,8 +152,6 @@ while (true) {
             if (!$window_url) {
                 $window_details['window_title'] = 'PRIVATE_BROWSING';
             }
-
-            log_to_file('window_details', $window_details);
 
         } elseif (strpos($application_path, 'code/code')) {
             // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
@@ -411,7 +401,6 @@ function value_matched($match_value, $pattern_value)
 
 function query($connection, $sql)
 {
-    log_to_file("sql", $sql);
     $result = $connection->query($sql);
     $error = $connection->error;
     if ($error) {
