@@ -4,6 +4,7 @@ $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
 $session_time_tracked = 0;
 $last_upwork_timer_notice_timestamp = 0;
+$application_path = null;
 
 $log_file_path = log_file_path();
 
@@ -277,6 +278,12 @@ function check_upwork($project_id, $seconds_passed)
     global $upwork_enabled_project_ids;
     global $session_time_tracked;
     global $last_upwork_timer_notice_timestamp;
+    global $application_path;
+
+    $is_upwork_active = strpos($application_path, 'Upwork/upwork');
+    if ($is_upwork_active) {
+        return;
+    }
 
     $should_track_time = in_array($project_id, $upwork_enabled_project_ids);
     $is_time_tracked = is_time_tracked();
