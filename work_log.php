@@ -2,7 +2,6 @@
 
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
-$session_time_tracked = 0;
 $last_upwork_timer_notice_timestamp = 0;
 $application_path = null;
 
@@ -276,8 +275,6 @@ function is_time_tracked()
 function check_upwork($project_id, $seconds_passed)
 {
     global $upwork_enabled_project_ids;
-    global $session_time_tracked;
-    global $last_upwork_timer_notice_timestamp;
     global $application_path;
 
     $is_upwork_active = strpos($application_path, 'Upwork/upwork');
@@ -287,12 +284,6 @@ function check_upwork($project_id, $seconds_passed)
 
     $should_track_time = in_array($project_id, $upwork_enabled_project_ids);
     $is_time_tracked = is_time_tracked();
-
-    if ($is_time_tracked) {
-        $session_time_tracked += round($seconds_passed);
-    } else {
-        $session_time_tracked = 0;
-    }
 
     $notification_text = null;
     $icon = null;
@@ -308,17 +299,6 @@ function check_upwork($project_id, $seconds_passed)
         $icon = 'stop';
     }
 
-    if ($is_time_tracked) {
-        $current_timestamp = microtime(true);
-        $show_upwork_timer_notice = substr(date('is'), 1, 2) === '90' && $current_timestamp - $last_upwork_timer_notice_timestamp > 30;
-
-        if ($show_upwork_timer_notice) {
-            $notification_text = 'Upwork timer will take screenshot soon';
-            $subtitle = 'Session time tracked is ' . format_time($session_time_tracked) . '.';
-            $last_upwork_timer_notice_timestamp = $current_timestamp;
-        }
-    }
-
     $theme_changed = set_theme($notification_text !== null);
 
     if (!$notification_text || !$theme_changed) {
@@ -326,16 +306,6 @@ function check_upwork($project_id, $seconds_passed)
     }
 
     notify($notification_text, $subtitle, $icon);
-}
-
-function format_time($seconds)
-{
-    $modulo = $seconds % 600;
-    $rounded_seconds = $seconds + ($modulo ? 600 - $modulo : 0);
-    $minutes = $rounded_seconds / 60 % 60;
-    $hours = floor($rounded_seconds / 3600);
-    
-    return sprintf('%02d:%02d:00', $hours, $minutes);
 }
 
 function set_theme($error = false)
