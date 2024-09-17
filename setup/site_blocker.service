@@ -1,0 +1,12 @@
+[Unit]
+Description=Site Blocker Service
+After=graphical-session.target
+
+[Service]
+User=root
+Type=simple
+ExecStart=/usr/bin/php /var/www/work_log/site_blocker.php
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

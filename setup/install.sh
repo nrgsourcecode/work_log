@@ -43,4 +43,4 @@ create_user_theme work-log-regular
 create_user_theme work-log-error
 replace_text_in_file "background-color: #131313" "background-color: #ff0000" ~/.themes/work-log-error/gnome-shell/gnome-shell.css
 
-source $setup_folder/install_service.sh
+source $setup_folder/instal_services.sh
