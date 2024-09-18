@@ -20,6 +20,14 @@ while (true) {
     $settings = json_decode(file_get_contents($settings_path), true);
     extract($settings);
 
+    $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
+    $site_blocker_status = exec($command);
+    echo $site_blocker_status;
+    if ($site_blocker_status == 'inactive') {
+        $command = 'sudo service site_blocker start';
+        exec($command);
+    }
+
     // Sleep before fetching data from the active application
     sleep($refresh_interval);
 
