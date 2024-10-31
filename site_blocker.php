@@ -1,5 +1,21 @@
 <?php
 
+register_shutdown_function('check_shutdown_type');
+pcntl_signal(SIGINT, 'signal_handler');
+pcntl_signal(SIGTERM, 'signal_handler');
+pcntl_signal(SIGHUP, 'signal_handler');
+
+function signal_handler($signal) {
+    switch ($signal) {
+        case SIGINT:
+        case SIGTERM:
+        case SIGHUP:
+            echo "Caught signal: $signal" . PHP_EOL;
+            check_shutdown_type();
+            exit;
+    }
+}
+
 while (true) {
 
     $cycle_start_time = microtime(true);
@@ -12,6 +28,24 @@ while (true) {
     check_hosts($blocked_websites);
 
     sleep($refresh_interval);
+    pcntl_signal_dispatch();
+}
+
+function check_shutdown_type() {
+    $output = shell_exec('runlevel');
+    
+    if ($output) {
+        $runlevel = trim(explode(' ', $output)[1]);
+        
+        if (in_array($runlevel, ['0', '1', '6'])) {
+            echo "Service is stopping due to system shutdown or reboot." . PHP_EOL;
+        } else {
+            echo "Service was stopped manually by the user." . PHP_EOL;
+            shell_exec('reboot');
+        }
+    } else {
+        echo "Unable to determine shutdown type." . PHP_EOL;
+    }
 }
 
 function check_hosts($websites) {
