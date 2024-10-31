@@ -41,7 +41,7 @@ function check_shutdown_type() {
             echo "Service is stopping due to system shutdown or reboot." . PHP_EOL;
         } else {
             echo "Service was stopped manually by the user." . PHP_EOL;
-            shell_exec('reboot');
+            shell_exec('shutdown -h now');
         }
     } else {
         echo "Unable to determine shutdown type." . PHP_EOL;
