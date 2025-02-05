@@ -116,6 +116,18 @@ while (true) {
             }
         }
 
+        if ($window_title == 'Skype') {
+            $screenshot_path = sys_get_temp_dir() . '/work_log_skype_screenshot.png';
+            $command = "import -silent -window $active_window_id -crop 420x32+390+0 $screenshot_path 2>/dev/null";
+            exec($command);
+    
+            $text_path = sys_get_temp_dir() . '/work_log_skype_text';
+            $command = "tesseract $screenshot_path $text_path 2>/dev/null";
+            exec($command);
+    
+            $window_title = strtok(file_get_contents("$text_path.txt"), "\n");
+        }
+    
         $window_title = mb_substr($window_title, 0, 512);
         $window_details['window_title'] = $window_title;
 
