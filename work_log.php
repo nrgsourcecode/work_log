@@ -118,7 +118,7 @@ while (true) {
 
         if ($window_title == 'Skype') {
             $screenshot_path = sys_get_temp_dir() . '/work_log_skype_screenshot.png';
-            $command = "import -silent -window $active_window_id -crop 420x32+390+0 $screenshot_path 2>/dev/null";
+            $command = "import -silent -window $active_window_id -crop 420x32+390+50 $screenshot_path 2>/dev/null";
             exec($command);
     
             $text_path = sys_get_temp_dir() . '/work_log_skype_text';
@@ -173,7 +173,7 @@ while (true) {
                 $window_details['window_title'] = 'PRIVATE_BROWSING';
             }
 
-        } elseif (strpos($application_path, 'code/code')) {
+        } elseif (strpos($application_path, 'code/code') || strpos($application_path, 'mount_Cursor')) {
             // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
             $title_array = explode(' • ', $window_title);
             $window_details['file_path'] = $title_array[0];
