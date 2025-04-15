@@ -3,7 +3,7 @@
 $sum_seconds_passed = 0;
 $program_start_time = microtime(true);
 $last_upwork_timer_notice_timestamp = 0;
-$application_path = null;
+$application_path = '';
 
 $log_file_path = log_file_path();
 
@@ -39,7 +39,7 @@ while (true) {
     $idle = ($idle_milliseconds > $idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
 
     $date = date('Y-m-d');
-    $application_path = null;
+    $application_path = '';
     $application_id = null;
     $window_details = [
         'application_id' => null,
@@ -129,48 +129,16 @@ while (true) {
         }
     
         $window_title = mb_substr($window_title, 0, 512);
-        $window_details['window_title'] = $window_title;
 
         if (strpos($application_path, 'chrome/chrome')) {
-            $bt_clients = [];
-            exec('bt clients', $bt_clients);
-            foreach ($bt_clients as $bt_client) {
-                if (strpos($bt_client, 'ERROR')) {
-                    $bt_client_info = explode("\t", $bt_client);
-                    $process_id = $bt_client_info[2];
-                    exec("kill $process_id");
-                }
-            }
-            $active_tabs_info = [];
-            $active_tab_ids = [];
-            exec('bt active', $active_tabs_info);
-
-            foreach ($active_tabs_info as $active_tab_info) {
-                $active_tab_array = explode("\t", $active_tab_info);
-                $active_tab_id = $active_tab_array[0];
-                $active_tab_ids[$active_tab_id] = $active_tab_id;
-            }
-
-            $tab_list = [];
-            $confirmed = false;
-            $window_url = null;
-            exec('bt list', $tab_list);
-            foreach ($tab_list as $tab_info) {
-                $tab_array = explode("\t", $tab_info);
-                $tab_id = $tab_array[0];
-                $tab_title = $tab_array[1];
-                $tab_url = $tab_array[2] ?? null;
-                if (mb_strpos($window_title, $tab_title) === 0 && !$confirmed) {
-                    $confirmed = isset($active_tab_ids[$tab_id]);
-                    $window_url = $tab_url;
-                    $window_url = explode('&', $window_url)[0];
-                    $window_url = mb_substr($window_url, 0, 512);
-                    $window_details['window_url'] = $window_url;
-                }
-            }
-
-            if (!$window_url) {
-                $window_details['window_title'] = 'PRIVATE_BROWSING';
+            $window_title_array = explode(' - tab-url: ', $window_title);
+            if ($window_url = $window_title_array[1] ?? null) {
+                $window_title = $window_title_array[0];
+                $window_url = explode('&', $window_url)[0];
+                $window_url = mb_substr($window_url, 0, 512);
+                $window_details['window_url'] = $window_url;
+            } else {
+                $window_title = 'PRIVATE_BROWSING';
             }
 
         } elseif (strpos($application_path, 'code/code') || strpos($application_path, 'mount_Cursor')) {
@@ -178,6 +146,8 @@ while (true) {
             $title_array = explode(' • ', $window_title);
             $window_details['file_path'] = $title_array[0];
         }
+
+        $window_details['window_title'] = $window_title;
 
         foreach ($patterns as $pattern) {
             if (pattern_matched($window_details, $pattern)) {
