@@ -25,6 +25,14 @@ while (true) {
     $settings = json_decode(file_get_contents($settings_path), true);
     extract($settings);
 
+    if (!is_array($blocked_websites)) {
+        $blocked_websites = [];
+    }
+
+    $always_blocked = ['chess.com', 'lichess.org'];
+    $blocked_websites = array_merge($blocked_websites, $always_blocked);
+    $blocked_websites = array_unique($blocked_websites);
+
     check_hosts($blocked_websites);
 
     sleep($refresh_interval);
