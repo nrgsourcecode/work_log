@@ -18,4 +18,5 @@ foreach ($last_reboot as $line) {
     $reboot_history[$date] = "$date $time";
 }
 
+$reboot_history = array_reverse(array_values($reboot_history));
 echo implode("\n", $reboot_history) . "\n";
