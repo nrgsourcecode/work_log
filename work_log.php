@@ -22,7 +22,6 @@ while (true) {
 
     $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
     $site_blocker_status = exec($command);
-    echo $site_blocker_status;
     if ($site_blocker_status == 'inactive') {
         $command = 'sudo service site_blocker start';
         exec($command);
@@ -105,6 +104,7 @@ while (true) {
 
         $window_title = trim(exec("xdotool getwindowname $active_window_id"));
         $first_letter = mb_substr($window_title, 0, 1);
+
         if ($first_letter == '●' || $first_letter == '*') {
             $window_title = trim(mb_substr($window_title, 1));
         }
@@ -116,22 +116,19 @@ while (true) {
             }
         }
 
-        if ($window_title == 'Skype') {
-            $screenshot_path = sys_get_temp_dir() . '/work_log_skype_screenshot.png';
-            $command = "import -silent -window $active_window_id -crop 420x32+390+50 $screenshot_path 2>/dev/null";
-            exec($command);
-    
-            $text_path = sys_get_temp_dir() . '/work_log_skype_text';
-            $command = "tesseract $screenshot_path $text_path 2>/dev/null";
-            exec($command);
-    
-            $window_title = strtok(file_get_contents("$text_path.txt"), "\n");
-        }
-    
         $window_title = mb_substr($window_title, 0, 512);
 
         if (strpos($application_path, 'chrome/chrome')) {
-            $window_title_array = explode(' - tab-url: ', $window_title);
+
+            $url_separator = ' - tab-url: ';
+            $whatsapp_url = 'web.whatsapp.com';
+            $wm_class = exec("xprop -id $active_window_id WM_CLASS");
+
+            if (!str_contains($window_title, $url_separator) && str_contains($wm_class, $whatsapp_url)) {
+                $window_title .= $url_separator . $whatsapp_url;
+            }
+
+            $window_title_array = explode($url_separator, $window_title);
             if ($window_url = $window_title_array[1] ?? null) {
                 $window_title = $window_title_array[0];
                 $window_url = explode('&', $window_url)[0];
