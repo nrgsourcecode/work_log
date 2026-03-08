@@ -216,7 +216,7 @@ while (true) {
         }
         $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_passed WHERE `id` = $id";
     } else {
-        $sql = "INSERT INTO `activity_log` (`window_detail_id`, `seconds`) VALUES ($window_detail_id, $seconds_passed)";
+        $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($window_detail_id, '$date', $seconds_passed)";
     }
     query($connection, $sql);
     $connection->close();
