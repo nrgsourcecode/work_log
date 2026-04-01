@@ -103,6 +103,7 @@ while (true) {
         }
 
         $window_title = trim(exec("xdotool getwindowname $active_window_id"));
+        echo "$window_title\n";
         $first_letter = mb_substr($window_title, 0, 1);
 
         if ($first_letter == '●' || $first_letter == '*') {
@@ -117,8 +118,10 @@ while (true) {
         }
 
         $window_title = mb_substr($window_title, 0, 512);
+            echo "application_path: $application_path\n";
 
         if (strpos($application_path, 'chrome/chrome')) {
+
 
             $url_separator = ' - tab-url: ';
             $whatsapp_url = 'web.whatsapp.com';
@@ -145,6 +148,7 @@ while (true) {
         }
 
         $window_details['window_title'] = $window_title;
+        print_r($window_details);
 
         foreach ($patterns as $pattern) {
             if (pattern_matched($window_details, $pattern)) {

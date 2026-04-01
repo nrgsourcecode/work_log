@@ -29,7 +29,7 @@ while (true) {
         $blocked_websites = [];
     }
 
-    $always_blocked = ['chess.com', 'lichess.org'];
+    $always_blocked = ['chess.com', 'lichess.org', 'chesspuzzle.net'];
     $blocked_websites = array_merge($blocked_websites, $always_blocked);
     $blocked_websites = array_unique($blocked_websites);
 
