@@ -148,7 +148,6 @@ while (true) {
         }
 
         $window_details['window_title'] = $window_title;
-        print_r($window_details);
 
         foreach ($patterns as $pattern) {
             if (pattern_matched($window_details, $pattern)) {
@@ -372,6 +371,7 @@ function query($connection, $sql)
     $result = $connection->query($sql);
     $error = $connection->error;
     if ($error) {
+        log_to_file('SQL Error', $error, true);
         notify($error);
     }
     return $result;
@@ -403,7 +403,7 @@ function notify($title, $subtitle = null, $icon = null)
 
 function log_file_path()
 {
-    return dirname(__FILE__) . '/query_log.txt';
+    return dirname(__FILE__) . '/work_log.txt';
 }
 
 function log_to_file($variable_name, $value, $force = false)

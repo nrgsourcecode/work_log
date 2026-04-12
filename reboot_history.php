@@ -15,6 +15,10 @@ foreach ($last_reboot as $line) {
     $date = $columns[4] . ' ' . $columns[5] . ' ' . $columns[6];
     $time = $columns[7];
 
+    if ($time < '05:00') {
+        continue;
+    }
+
     $reboot_history[$date] = "$date $time";
 }
 
