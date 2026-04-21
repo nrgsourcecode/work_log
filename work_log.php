@@ -1,19 +1,11 @@
 <?php
 
-$sum_seconds_passed = 0;
-$program_start_time = microtime(true);
-$last_upwork_timer_notice_timestamp = 0;
 $application_path = '';
-
-$log_file_path = log_file_path();
-
-if (file_exists($log_file_path)) {
-    unlink($log_file_path);
-}
+$total_seconds_tracked = 0;
+$program_start_time = microtime(true);
+$microtime = $program_start_time;
 
 while (true) {
-
-    $cycle_start_time = microtime(true);
 
     // Read settings
     $settings_path = __DIR__ . '/settings.json';
@@ -33,7 +25,6 @@ while (true) {
     // Get the active window
     $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
     $idle_milliseconds = exec('xprintidle');
-
 
     $idle = ($idle_milliseconds > $idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
 
@@ -103,7 +94,6 @@ while (true) {
         }
 
         $window_title = trim(exec("xdotool getwindowname $active_window_id"));
-        echo "$window_title\n";
         $first_letter = mb_substr($window_title, 0, 1);
 
         if ($first_letter == '●' || $first_letter == '*') {
@@ -118,7 +108,6 @@ while (true) {
         }
 
         $window_title = mb_substr($window_title, 0, 512);
-            echo "application_path: $application_path\n";
 
         if (strpos($application_path, 'chrome/chrome')) {
 
@@ -204,22 +193,21 @@ while (true) {
         $window_detail_id = $connection->insert_id;
     }
 
-
     $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
     $resource = query($connection, $sql);
     $microtime = microtime(true);
-    $actual_total_seconds_passed = $microtime - $program_start_time;
-    $seconds_passed = round($microtime - $cycle_start_time, 3);
-    $sum_seconds_passed += $seconds_passed;
-    check_upwork($window_details['project_id'], $seconds_passed);
+    $total_seconds_passed = round($microtime - $program_start_time, 3);
+    $seconds_to_track = round($total_seconds_passed - $total_seconds_tracked, 3);
+    $total_seconds_tracked += $seconds_to_track;
+    check_upwork($window_details['project_id']);
 
     if ($resource->num_rows) {
         while ($row = $resource->fetch_assoc()) {
             $id = $row['id'];
         }
-        $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_passed WHERE `id` = $id";
+        $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_to_track WHERE `id` = $id";
     } else {
-        $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($window_detail_id, '$date', $seconds_passed)";
+        $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($window_detail_id, '$date', $seconds_to_track)";
     }
     query($connection, $sql);
     $connection->close();
@@ -262,7 +250,7 @@ function is_time_tracked()
     return $result;
 }
 
-function check_upwork($project_id, $seconds_passed)
+function check_upwork($project_id)
 {
     global $upwork_enabled_project_ids;
     global $application_path;
