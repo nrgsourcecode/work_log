@@ -4,6 +4,196 @@ $application_path = '';
 $total_seconds_tracked = 0;
 $program_start_time = microtime(true);
 $microtime = $program_start_time;
+$window_details_template = [
+    'application_id' => null,
+    'activity_id' => null,
+    'project_id' => null,
+    'task_id' => null,
+    'window_title' => null,
+    'file_path' => null,
+    'window_url' => null
+];
+
+function get_window_details(): array|false
+{
+    global $window_details_template;
+    global $idle_timeout_seconds;
+
+    $result = $window_details_template;
+
+    $idle_milliseconds = get_idle_time_in_milliseconds();
+
+    $command_output = [];
+    $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List';
+    exec($command, $command_output);
+    $trimmed_command_output = substr($command_output[0], 2, -3);
+    $all_window_details = json_decode($trimmed_command_output, true);
+    $focused_window_details = array_find($all_window_details, function($window_details) {
+        return $window_details['focus'] == 1;
+    });
+
+    if (($idle_milliseconds > $idle_timeout_seconds * 1000) || empty($focused_window_details)) {
+        $result['activity_id'] = 1;
+        $result['window_title'] = 'COMPUTER_IS_IDLE';
+        return $result;
+    }
+
+    $active_process_id = $focused_window_details['pid'];
+    $wm_class = $focused_window_details['wm_class'];
+
+    $application_details = get_application_details($active_process_id);
+
+    if (empty($application_details)) {
+        return false;
+    }
+
+    $application_id = $application_details['id'];
+    $application_path = $application_details['path'];
+    
+    $result['application_id'] = $application_id;
+
+    $patterns = fetch_patterns($application_id, $application_path);
+    if ($patterns === false) {
+        return false;
+    }
+
+    $window_title = $focused_window_details['title'];
+    $first_letter = mb_substr($window_title, 0, 1);
+
+    $window_title = mb_substr($window_title, 0, 512);
+
+    if ($first_letter == '●' || $first_letter == '*') {
+        $window_title = trim(mb_substr($window_title, 1));
+    }
+
+    if (strpos($application_path, 'dbeaver')) {
+        handle_dbeaver($window_title);
+    } else if (strpos($application_path, 'chrome/chrome')) {
+        handle_chrome($result, $wm_class, $window_title);
+    } else if (strpos($application_path, 'code/code') || strpos($application_path, 'mount_Cursor')) {
+        handle_code($result, $window_title);
+    }
+
+    $result['window_title'] = $window_title;
+
+    apply_matched_pattern($result, $patterns);
+ 
+    return $result;
+}
+
+function fetch_patterns($application_id, $application_path): array|false
+{
+    $patterns = [];
+    $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
+    $data = select_query($sql);
+    if ($data === false) {
+        return false;
+    }
+
+    foreach ($data as $row) {
+        $pattern = $row;
+        if (value_matched($application_path, $pattern['application_path'])) {
+            $pattern['application_id'] = $application_id;
+            $patterns[] = $pattern;
+        }
+    }
+    return $patterns;
+}
+
+function apply_matched_pattern(&$window_details, $patterns)
+{
+    foreach ($patterns as $pattern) {
+        if (pattern_matched($window_details, $pattern)) {
+            foreach ($window_details as $field => $value) {
+                $pattern_value = $pattern[$field];
+                if (is_null($value) || $pattern['override_matched_details']) {
+                    $window_details[$field] = $pattern_value;
+                }
+            }
+            break;
+        }
+    }
+}
+
+function handle_dbeaver(&$window_title)
+{
+    if (!$dash_position = strpos($window_title, ' - ')) {
+        return;
+    }
+
+    $window_title = 'DBeaver' . substr($window_title, $dash_position);
+}
+
+
+function handle_chrome(&$window_details, $wm_class, &$window_title)
+{
+    $url_separator = ' - tab-url: ';
+    $whatsapp_url = 'web.whatsapp.com';
+
+    if (!str_contains($window_title, $url_separator) && str_contains($wm_class, $whatsapp_url)) {
+        $window_title .= $url_separator . $whatsapp_url;
+    }
+
+    $window_title_array = explode($url_separator, $window_title);
+    if (!$window_url = $window_title_array[1] ?? null) {
+        $window_title = 'PRIVATE_BROWSING';
+        return;
+    }
+
+    $window_title = $window_title_array[0];
+    $window_url = explode('&', $window_url)[0];
+    $window_url = mb_substr($window_url, 0, 512);
+    $window_details['window_url'] = $window_url;
+}
+
+function handle_code(&$window_details, $window_title)
+{
+    $title_array = explode(' • ', $window_title);
+    $window_details['file_path'] = $title_array[0];
+}
+
+function get_application_details($process_id): false|array
+{
+    $process_information = [];
+    exec("ps aux | grep $process_id", $process_information);
+
+    foreach ($process_information as $line) {
+        $line = preg_replace('!\s+!', ' ', $line);
+        $line_array = explode(' ', $line);
+        if ($line_array[1] != $process_id) {
+            continue;
+        }
+
+        $application_path = $line_array[10];
+
+        $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
+        $data = select_query($sql);
+
+        if ($data === false) {
+            return false;
+        }
+
+        if (!$application_id = $data[0]['id'] ?? null) {
+            $sql = "INSERT INTO applications(`path`) VALUES ('$application_path')";
+            $application_id = insert_query($sql);
+        }
+
+        return [
+            'id' => $application_id,
+            'path' => $application_path
+        ];
+    }
+
+    return false;
+}
+
+function get_idle_time_in_milliseconds(): float
+{
+    $command = 'gdbus call --session --dest org.gnome.Mutter.IdleMonitor --object-path /org/gnome/Mutter/IdleMonitor/Core --method org.gnome.Mutter.IdleMonitor.GetIdletime';
+    $result = exec($command);
+    $result = substr($result, 8, -2);
+    return (float) $result;
+}
 
 while (true) {
 
@@ -22,134 +212,16 @@ while (true) {
     // Sleep before fetching data from the active application
     sleep($refresh_interval);
 
-    // Get the active window
-    $active_window_handle = exec('xprop -root -f _NET_ACTIVE_WINDOW 0x " \$0\\n" _NET_ACTIVE_WINDOW | awk "{print \$2}"');
-    $idle_milliseconds = exec('xprintidle');
-
-    $idle = ($idle_milliseconds > $idle_timeout_seconds * 1000) || $active_window_handle == '0x0';
-
     $date = date('Y-m-d');
     $application_path = '';
     $application_id = null;
-    $window_details = [
-        'application_id' => null,
-        'activity_id' => null,
-        'project_id' => null,
-        'task_id' => null,
-        'window_title' => null,
-        'file_path' => null,
-        'window_url' => null
-    ];
+
+    $window_details = get_window_details();
+    if ($window_details === false) {
+        continue;
+    }
 
     $window_detail_id = null;
-
-    $connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
-
-    if ($idle) {
-        $window_details['activity_id'] = 1;
-        $window_details['window_title'] = 'COMPUTER_IS_IDLE';
-    } else {
-        $active_window_id = exec('xdotool getactivewindow');
-        if (!$active_window_id) {
-            continue;
-        }
-        $active_process_id = exec("xdotool getwindowpid $active_window_id");
-
-        $process_information = [];
-        exec("ps aux | grep $active_process_id", $process_information);
-
-        foreach ($process_information as $line) {
-            $line = preg_replace('!\s+!', ' ', $line);
-            $line_array = explode(' ', $line);
-            if ($line_array[1] == $active_process_id) {
-                $active_process_info = $line;
-                $application_path = $line_array[10];
-
-                $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
-                $resource = query($connection, $sql);
-                if ($resource->num_rows) {
-                    while ($row = $resource->fetch_assoc()) {
-                        $application_id = $row['id'];
-                    }
-                } else {
-                    $sql = "INSERT INTO applications(`path`) VALUES ('$application_path')";
-                    query($connection, $sql);
-                    $application_id = $connection->insert_id;
-                }
-            }
-        }
-        $window_details['application_id'] = $application_id;
-
-        $patterns = [];
-        $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
-        $resource = query($connection, $sql);
-        if ($resource->num_rows) {
-            while ($row = $resource->fetch_assoc()) {
-                $pattern = $row;
-                if (value_matched($application_path, $pattern['application_path'])) {
-                    $pattern['application_id'] = $application_id;
-                    $patterns[] = $pattern;
-                }
-            }
-        }
-
-        $window_title = trim(exec("xdotool getwindowname $active_window_id"));
-        $first_letter = mb_substr($window_title, 0, 1);
-
-        if ($first_letter == '●' || $first_letter == '*') {
-            $window_title = trim(mb_substr($window_title, 1));
-        }
-
-        if (strpos($application_path, 'dbeaver')) {
-            $dash_position = strpos($window_title, ' - ');
-            if ($dash_position) {
-                $window_title = 'DBeaver' . substr($window_title, $dash_position);
-            }
-        }
-
-        $window_title = mb_substr($window_title, 0, 512);
-
-        if (strpos($application_path, 'chrome/chrome')) {
-
-
-            $url_separator = ' - tab-url: ';
-            $whatsapp_url = 'web.whatsapp.com';
-            $wm_class = exec("xprop -id $active_window_id WM_CLASS");
-
-            if (!str_contains($window_title, $url_separator) && str_contains($wm_class, $whatsapp_url)) {
-                $window_title .= $url_separator . $whatsapp_url;
-            }
-
-            $window_title_array = explode($url_separator, $window_title);
-            if ($window_url = $window_title_array[1] ?? null) {
-                $window_title = $window_title_array[0];
-                $window_url = explode('&', $window_url)[0];
-                $window_url = mb_substr($window_url, 0, 512);
-                $window_details['window_url'] = $window_url;
-            } else {
-                $window_title = 'PRIVATE_BROWSING';
-            }
-
-        } elseif (strpos($application_path, 'code/code') || strpos($application_path, 'mount_Cursor')) {
-            // requires '${activeEditorLong}' in 'Window: Title' setting and ' • ' in 'Window: Title Separator'
-            $title_array = explode(' • ', $window_title);
-            $window_details['file_path'] = $title_array[0];
-        }
-
-        $window_details['window_title'] = $window_title;
-
-        foreach ($patterns as $pattern) {
-            if (pattern_matched($window_details, $pattern)) {
-                foreach ($window_details as $field => $value) {
-                    $pattern_value = $pattern[$field];
-                    if (is_null($value) || $pattern['override_matched_details']) {
-                        $window_details[$field] = $pattern_value;
-                    }
-                }
-                break;
-            }
-        }
-    }
 
     $sql = "SELECT * FROM window_details WHERE ";
     $insert_fields_sql = '';
@@ -162,7 +234,7 @@ while (true) {
         }
         
         if (is_string($value) && !is_numeric($value)) {
-            $value = "'" . $connection->real_escape_string($value) . "'";
+            $value = "'" . addslashes($value) . "'";
         }
 
         if (strpos($field, '_id') === false) {
@@ -172,13 +244,18 @@ while (true) {
 
         $insert_fields_sql .= ($counter ? ', ' : '') . $field;
         $insert_values_sql .= ($counter ? ', ' : '') . $value;
-        $counter++;
+        $counter ++;
     }
 
-    $resource = query($connection, $sql);
-    if ($resource->num_rows) {
-        $row = $resource->fetch_assoc();
+    $data = select_query($sql);
+    if ($data === false) {
+        continue;
+    }
+
+
+    if ($row = $data[0] ?? null) {
         $window_detail_id = $row['id'];
+
         foreach ($window_details as $field => $value) {
             if (empty($value)) {
                 $row_value = $row[$field] ?? null;
@@ -187,30 +264,39 @@ while (true) {
                 }
             }
         }
+
     } else {
+
         $sql = "INSERT INTO window_details ($insert_fields_sql) VALUES ($insert_values_sql)";
-        query($connection, $sql);
-        $window_detail_id = $connection->insert_id;
+        $window_detail_id = insert_query($sql);
+
+        if ($window_detail_id === false) {
+            continue;
+        }
+
     }
 
     $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
-    $resource = query($connection, $sql);
+    $data = select_query($sql);
+
+    if ($data === false) {
+        continue;
+    }
+
     $microtime = microtime(true);
     $total_seconds_passed = round($microtime - $program_start_time, 3);
     $seconds_to_track = round($total_seconds_passed - $total_seconds_tracked, 3);
     $total_seconds_tracked += $seconds_to_track;
     check_upwork($window_details['project_id']);
 
-    if ($resource->num_rows) {
-        while ($row = $resource->fetch_assoc()) {
-            $id = $row['id'];
-        }
+    if ($id = $data[0]['id'] ?? null) {
         $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_to_track WHERE `id` = $id";
-    } else {
-        $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($window_detail_id, '$date', $seconds_to_track)";
+        query($sql);
+        continue;
     }
-    query($connection, $sql);
-    $connection->close();
+
+    $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($window_detail_id, '$date', $seconds_to_track)";
+    insert_query($sql);
 }
 
 function is_time_tracked_in_upwork_window($upwork_process_id, $title, $x, $y)
@@ -306,11 +392,14 @@ function pattern_matched($window_details, $pattern)
 {
     $result = true;
     foreach ($window_details as $field => $value) {
-        if (strpos($field, '_id') === false) {
-            $result = $result && value_matched($value, $pattern[$field]);
-            if (!$result) {
-                break;
-            }
+        if (str_ends_with($field, '_id')) {
+            continue;
+        }
+
+        $result = $result && value_matched($value, $pattern[$field]);
+
+        if (!$result) {
+            break;
         }
     }
     return $result;
@@ -354,13 +443,50 @@ function value_matched($match_value, $pattern_value)
     return $result;
 }
 
-function query($connection, $sql)
+function query($sql, $insert = false): int|false|mysqli_result
 {
-    $result = $connection->query($sql);
-    $error = $connection->error;
-    if ($error) {
-        log_to_file('SQL Error', $error, true);
-        notify($error);
+    global $DB_HOST;
+    global $DB_USERNAME;
+    global $DB_PASSWORD;
+    global $DB_DATABASE;
+
+    $connection = null;
+
+    try {
+        $connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
+        $resource = $connection->query($sql);
+    } catch (mysqli_sql_exception $e) {
+        handle_error($e->getMessage());
+        if ($connection) {
+            $connection->close();
+        }
+        return false;
+    }
+
+    if ($insert) {
+        $last_inserted_id = $connection->insert_id;
+        $connection->close();
+        return $last_inserted_id;
+    }
+
+    $connection->close();
+    return $resource;
+}
+
+function insert_query($sql)
+{
+    return query($sql, true);
+}
+
+function select_query($sql): array|false
+{
+    if (!$resource = query($sql)) {
+        return false;
+    }
+
+    $result = [];
+    while ($row = $resource->fetch_assoc()) {
+        $result[] = $row;
     }
     return $result;
 }
@@ -392,6 +518,12 @@ function notify($title, $subtitle = null, $icon = null)
 function log_file_path()
 {
     return dirname(__FILE__) . '/work_log.txt';
+}
+
+function handle_error($error)
+{
+    log_to_file('Error', $error, true);
+    notify('An error occurred', $error, 'error');
 }
 
 function log_to_file($variable_name, $value, $force = false)
