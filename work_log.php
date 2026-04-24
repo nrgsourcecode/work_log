@@ -14,6 +14,21 @@ $window_details_template = [
     'window_url' => null
 ];
 
+function get_all_window_details(): array
+{
+    $command_output = [];
+    $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List';
+    exec($command, $command_output);
+    if (empty($command_output)) {
+        handle_error('Failed to get window details');
+        return [];
+    }
+    $trimmed_command_output = substr($command_output[0], 2, -3);
+    $all_window_details = json_decode($trimmed_command_output, true);
+
+    return $all_window_details;
+}
+
 function get_window_details(): array|false
 {
     global $window_details_template;
@@ -23,11 +38,11 @@ function get_window_details(): array|false
 
     $idle_milliseconds = get_idle_time_in_milliseconds();
 
-    $command_output = [];
-    $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List';
-    exec($command, $command_output);
-    $trimmed_command_output = substr($command_output[0], 2, -3);
-    $all_window_details = json_decode($trimmed_command_output, true);
+    $all_window_details = get_all_window_details();
+    if (empty($all_window_details)) {
+        return false;
+    }
+
     $focused_window_details = array_find($all_window_details, function($window_details) {
         return $window_details['focus'] == 1;
     });
@@ -44,6 +59,7 @@ function get_window_details(): array|false
     $application_details = get_application_details($active_process_id);
 
     if (empty($application_details)) {
+        handle_error('Failed to get application details for process id ' . $active_process_id);
         return false;
     }
 
@@ -54,6 +70,7 @@ function get_window_details(): array|false
 
     $patterns = fetch_patterns($application_id, $application_path);
     if ($patterns === false) {
+        handle_error('Failed to fetch patterns for application id ' . $application_id);
         return false;
     }
 
