@@ -14,17 +14,32 @@ $window_details_template = [
     'window_url' => null
 ];
 
-function get_all_window_details(): array
+function get_all_window_details(): array|false
 {
-    $command_output = [];
-    $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List';
-    exec($command, $command_output);
-    if (empty($command_output)) {
-        handle_error('Failed to get window details');
-        return [];
+    $output = [];
+    $result_code = 0;
+    $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List 2>/dev/null';
+    exec($command, $output, $result_code);
+
+    $output_string = implode("\n", $output);
+
+    if ($result_code !== 0) {
+        return false;
     }
-    $trimmed_command_output = substr($command_output[0], 2, -3);
+
+    if (strlen($output_string) < 5) {
+        handle_error("Window list command output too short $output_string");
+        return false;
+    }
+
+    $trimmed_command_output = substr($output_string, 2, -3);
+    $trimmed_command_output = str_replace('\\\\', '\\', $trimmed_command_output);
     $all_window_details = json_decode($trimmed_command_output, true);
+
+    if (is_null($all_window_details)) {
+        handle_error("Failed to decode JSON from window list\nCommand output: $output_string\nError: " . json_last_error_msg());
+        return false;
+    }
 
     return $all_window_details;
 }
@@ -36,21 +51,21 @@ function get_window_details(): array|false
 
     $result = $window_details_template;
 
-    $idle_milliseconds = get_idle_time_in_milliseconds();
-
-    $all_window_details = get_all_window_details();
-    if (empty($all_window_details)) {
-        return false;
+    $all_windows_details = get_all_window_details();
+    if ($all_windows_details === false) {
+        return idle_window_details($result);
     }
 
-    $focused_window_details = array_find($all_window_details, function($window_details) {
+    $focused_window_details = array_find($all_windows_details, function($window_details) {
         return $window_details['focus'] == 1;
     });
 
-    if (($idle_milliseconds > $idle_timeout_seconds * 1000) || empty($focused_window_details)) {
-        $result['activity_id'] = 1;
-        $result['window_title'] = 'COMPUTER_IS_IDLE';
-        return $result;
+    if (empty($focused_window_details)) {
+        return idle_window_details($result);
+    }
+
+    if (get_idle_time_in_seconds() > $idle_timeout_seconds) {
+        return idle_window_details($result);
     }
 
     $active_process_id = $focused_window_details['pid'];
@@ -96,6 +111,13 @@ function get_window_details(): array|false
     apply_matched_pattern($result, $patterns);
  
     return $result;
+}
+
+function idle_window_details($window_details)
+{
+    $window_details['activity_id'] = 1;
+    $window_details['window_title'] = 'COMPUTER_IS_IDLE';
+    return $window_details;
 }
 
 function fetch_patterns($application_id, $application_path): array|false
@@ -204,12 +226,25 @@ function get_application_details($process_id): false|array
     return false;
 }
 
-function get_idle_time_in_milliseconds(): float
+function get_idle_time_in_seconds(): float
 {
-    $command = 'gdbus call --session --dest org.gnome.Mutter.IdleMonitor --object-path /org/gnome/Mutter/IdleMonitor/Core --method org.gnome.Mutter.IdleMonitor.GetIdletime';
-    $result = exec($command);
-    $result = substr($result, 8, -2);
-    return (float) $result;
+    $output = [];
+    $result_code = 0;
+    $command = 'gdbus call --session --dest org.gnome.Mutter.IdleMonitor --object-path /org/gnome/Mutter/IdleMonitor/Core --method org.gnome.Mutter.IdleMonitor.GetIdletime 2>/dev/null';
+    exec($command, $output, $result_code);
+
+    if ($result_code !== 0) {
+        return 0;
+    }
+
+    $output_string = implode("\n", $output);
+    if (strlen($output_string) < 5) {
+        handle_error("Window list command output too short $output_string");
+        return 0;
+    }
+
+    $time_in_milliseconds = (float) substr($output_string, 8, -2);
+    return $time_in_milliseconds / 1000;
 }
 
 while (true) {
@@ -537,13 +572,13 @@ function log_file_path()
     return dirname(__FILE__) . '/work_log.txt';
 }
 
-function handle_error($error)
+function handle_error(string $error)
 {
     log_to_file('Error', $error, true);
     notify('An error occurred', $error, 'error');
 }
 
-function log_to_file($variable_name, $value, $force = false)
+function log_to_file(string $variable_name, array|string $value, bool $force = false)
 {
     global $enable_logging;
 
@@ -551,6 +586,6 @@ function log_to_file($variable_name, $value, $force = false)
         return;
     }
 
-    $output = (is_array($value) ? json_encode($value) : $value);
-    file_put_contents(log_file_path(), "\n\n$variable_name:\n$output", FILE_APPEND);
+    $output = (is_array($value) ? json_encode($value) : (string)$value);
+    file_put_contents(log_file_path(), "\n\n" . date('Y-m-d H:i:s') . "\n$variable_name:\n$output", FILE_APPEND);
 }
