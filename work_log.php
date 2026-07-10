@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/chrome_url_bridge.php';
+start_server();
+
 $application_path = '';
 $total_seconds_tracked = 0;
 $program_start_time = microtime(true);
@@ -56,7 +59,7 @@ function get_window_details(): array|false
         return idle_window_details($result);
     }
 
-    $focused_window_details = array_find($all_windows_details, function($window_details) {
+    $focused_window_details = array_find($all_windows_details, function ($window_details) {
         return $window_details['focus'] == 1;
     });
 
@@ -80,7 +83,7 @@ function get_window_details(): array|false
 
     $application_id = $application_details['id'];
     $application_path = $application_details['path'];
-    
+
     $result['application_id'] = $application_id;
 
     $patterns = fetch_patterns($application_id, $application_path);
@@ -101,7 +104,7 @@ function get_window_details(): array|false
     if (strpos($application_path, 'dbeaver')) {
         handle_dbeaver($window_title);
     } else if (strpos($application_path, 'chrome/chrome')) {
-        handle_chrome($result, $wm_class, $window_title);
+        handle_chrome($result, $window_title);
     } else if (strpos($application_path, 'code/code') || strpos($application_path, 'mount_Cursor')) {
         handle_code($result, $window_title);
     }
@@ -109,7 +112,7 @@ function get_window_details(): array|false
     $result['window_title'] = $window_title;
 
     apply_matched_pattern($result, $patterns);
- 
+
     return $result;
 }
 
@@ -154,7 +157,7 @@ function apply_matched_pattern(&$window_details, $patterns)
     }
 }
 
-function handle_dbeaver(&$window_title)
+function handle_dbeaver(string &$window_title)
 {
     if (!$dash_position = strpos($window_title, ' - ')) {
         return;
@@ -164,22 +167,14 @@ function handle_dbeaver(&$window_title)
 }
 
 
-function handle_chrome(&$window_details, $wm_class, &$window_title)
+function handle_chrome(array &$window_details, string &$window_title)
 {
-    $url_separator = ' - tab-url: ';
-    $whatsapp_url = 'web.whatsapp.com';
 
-    if (!str_contains($window_title, $url_separator) && str_contains($wm_class, $whatsapp_url)) {
-        $window_title .= $url_separator . $whatsapp_url;
-    }
-
-    $window_title_array = explode($url_separator, $window_title);
-    if (!$window_url = $window_title_array[1] ?? null) {
+    if (!$window_url = get_chrome_url()) {
         $window_title = 'PRIVATE_BROWSING';
         return;
     }
 
-    $window_title = $window_title_array[0];
     $window_url = explode('&', $window_url)[0];
     $window_url = mb_substr($window_url, 0, 512);
     $window_details['window_url'] = $window_url;
@@ -284,7 +279,7 @@ while (true) {
         if (is_null($value)) {
             continue;
         }
-        
+
         if (is_string($value) && !is_numeric($value)) {
             $value = "'" . addslashes($value) . "'";
         }
@@ -296,7 +291,7 @@ while (true) {
 
         $insert_fields_sql .= ($counter ? ', ' : '') . $field;
         $insert_values_sql .= ($counter ? ', ' : '') . $value;
-        $counter ++;
+        $counter++;
     }
 
     $data = select_query($sql);
@@ -316,7 +311,6 @@ while (true) {
                 }
             }
         }
-
     } else {
 
         $sql = "INSERT INTO window_details ($insert_fields_sql) VALUES ($insert_values_sql)";
@@ -325,7 +319,6 @@ while (true) {
         if ($window_detail_id === false) {
             continue;
         }
-
     }
 
     $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
@@ -434,7 +427,7 @@ function set_theme($error = false)
     if ($current_theme === $new_theme) {
         return false;
     }
-    
+
     $command = "gsettings set org.gnome.shell.extensions.user-theme name \"'$new_theme'\"";
     exec($command);
     return true;
@@ -472,7 +465,7 @@ function value_matched($match_value, $pattern_value)
     if (!$match_left) {
         $pattern_value = substr($pattern_value, 1);
     }
-    $match_right = substr($pattern_value, -1, ) != '*';
+    $match_right = substr($pattern_value, -1,) != '*';
     if (!$match_right) {
         $pattern_value = substr($pattern_value, 0, -1);
     }
@@ -562,7 +555,7 @@ function notify($title, $subtitle = null, $icon = null)
     if (!$icon) {
         return;
     }
-    
+
     $command = 'paplay /usr/share/sounds/freedesktop/stereo/' . ($icon == 'start' ? 'complete' : 'power-unplug') . '.oga &';
     exec($command);
 }

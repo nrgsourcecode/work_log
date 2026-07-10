@@ -2,16 +2,14 @@
 
 ## Installation
 
-Download this Chrome extension:
-https://github.com/erichgoldman/add-url-to-window-title
-
-Install it, then select "Show the full URL?" option, and use " - tab-url: " as the Separator String
+Install the Chrome extension from the setup folder.
 
 To read File names from code, the following is required:
-- `${activeEditorLong}` in 'Window: Title' setting
-- ` • ` in 'Window: Title Separator' setting
 
-Install this Gnome extension:
+- `${activeEditorLong}` in 'Window: Title' setting
+- `•` in 'Window: Title Separator' setting
+
+Install this Gnome extension in order to read window details in Wayland:
 https://extensions.gnome.org/extension/4724/window-calls/
 
 Please run this command:  

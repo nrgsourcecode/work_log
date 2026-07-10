@@ -1,0 +1,6 @@
+{
+  "server": {
+    "port": 9876,
+    "endpoint": "/chrome_url_bridge.php"
+  }
+}
