@@ -25,7 +25,10 @@ function get_chrome_url()
     return trim($url);
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? null) === 'POST') {
+$request_method = $_SERVER['REQUEST_METHOD'] ?? null;
+$remote_address = $_SERVER['REMOTE_ADDR'] ?? null;
+
+if ($request_method === 'POST' && $remote_address === '127.0.0.1') {
     $body = file_get_contents('php://input');
     $data = json_decode($body, true);
     file_put_contents($chrome_url_path, $data['url'] ?? '');
