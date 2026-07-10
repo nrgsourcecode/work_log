@@ -46,13 +46,6 @@ async function updateCurrentUrl() {
             return;
         }
 
-        /*
-         * IMPORTANT
-         *
-         * If the focused window is Incognito,
-         * never expose any URL.
-         */
-
         if (window.incognito) {
             publish(null);
             return;
