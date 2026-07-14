@@ -23,12 +23,11 @@ function get_all_window_details(): array|false
     $result_code = 0;
     $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List 2>/dev/null';
     exec($command, $output, $result_code);
-
-    $output_string = implode("\n", $output);
-
     if ($result_code !== 0) {
         return false;
     }
+
+    $output_string = implode("\n", $output);
 
     if (strlen($output_string) < 5) {
         handle_error("Window list command output too short $output_string");
@@ -37,6 +36,10 @@ function get_all_window_details(): array|false
 
     $trimmed_command_output = substr($output_string, 2, -3);
     $trimmed_command_output = str_replace('\\\\', '\\', $trimmed_command_output);
+    if (substr($trimmed_command_output, 2, 1) === '\\') {
+        $trimmed_command_output = json_decode('"' . $trimmed_command_output . '"');
+    }
+
     $all_window_details = json_decode($trimmed_command_output, true);
 
     if (is_null($all_window_details)) {
