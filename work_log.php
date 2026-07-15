@@ -35,10 +35,10 @@ function get_all_window_details(): array|false
     }
 
     $trimmed_command_output = substr($output_string, 2, -3);
-    $trimmed_command_output = str_replace('\\\\', '\\', $trimmed_command_output);
     if (substr($trimmed_command_output, 2, 1) === '\\') {
         $trimmed_command_output = json_decode('"' . $trimmed_command_output . '"');
     }
+    $trimmed_command_output = str_replace('\\\\', '\\', $trimmed_command_output);
 
     $all_window_details = json_decode($trimmed_command_output, true);
 
