@@ -5,7 +5,8 @@ pcntl_signal(SIGINT, 'signal_handler');
 pcntl_signal(SIGTERM, 'signal_handler');
 pcntl_signal(SIGHUP, 'signal_handler');
 
-function signal_handler($signal) {
+function signal_handler($signal)
+{
     switch ($signal) {
         case SIGINT:
         case SIGTERM:
@@ -39,7 +40,8 @@ while (true) {
         'chesscompass.com',
         'chesspuzzler.com',
         'chesskid.com',
-        'chessmood.com'
+        'chessmood.com',
+        'q3js.com'
     ];
     $blocked_websites = array_merge($blocked_websites, $always_blocked);
     $blocked_websites = array_unique($blocked_websites);
@@ -50,12 +52,13 @@ while (true) {
     pcntl_signal_dispatch();
 }
 
-function check_shutdown_type() {
+function check_shutdown_type()
+{
     $output = shell_exec('runlevel');
-    
+
     if ($output) {
         $runlevel = trim(explode(' ', $output)[1]);
-        
+
         if (in_array($runlevel, ['0', '1', '6'])) {
             echo "Service is stopping due to system shutdown or reboot." . PHP_EOL;
         } else {
@@ -67,7 +70,8 @@ function check_shutdown_type() {
     }
 }
 
-function check_hosts(array $websites) {
+function check_hosts(array $websites)
+{
 
     $hosts_file = '/etc/hosts';
 
@@ -76,8 +80,8 @@ function check_hosts(array $websites) {
     $block_contents = "\n# BLOCK MANAGED BY WORK_LOG\n# EVERYTHING BELOW THIS BLOCK WILL BE DELETED\n";
     $first_line_start = strpos($hosts_contents, $block_contents);
 
-    foreach($websites as $website) {
-        $block_contents.= build_hosts_line($website);
+    foreach ($websites as $website) {
+        $block_contents .= build_hosts_line($website);
     }
 
     $block_contents .= "\n# END BLOCK";
@@ -95,7 +99,8 @@ function check_hosts(array $websites) {
     file_put_contents($hosts_file, $hosts_contents);
 }
 
-function build_hosts_line($website, $add_www = true) {
+function build_hosts_line($website, $add_www = true)
+{
     $result = "\n127.0.0.1\t" . $website;
     if ($add_www) {
         $result .= "\n127.0.0.1\twww." . $website;
