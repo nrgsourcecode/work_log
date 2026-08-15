@@ -224,6 +224,24 @@ function get_application_details($process_id): false|array
     return false;
 }
 
+function set_immutable_flag(string $file_path)
+{
+    $command = "lsattr $file_path";
+    $result = exec($command);
+    if (strpos($result, '---i---')) {
+        // log_to_file('lsattr_result_before', $result);
+        return;
+    }
+
+    $command = "sudo chattr +i $file_path";
+    $result = exec($command);
+    // log_to_file('immutable_flag_result', $result);
+
+    $command = "lsattr $file_path";
+    $result = exec($command);
+    // log_to_file('lsattr_result_after', $result);
+}
+
 function get_idle_time_in_seconds(): float
 {
     $output = [];
@@ -258,6 +276,9 @@ while (true) {
         $command = 'sudo service site_blocker start';
         exec($command);
     }
+
+    set_immutable_flag($settings_path);
+    set_immutable_flag(__DIR__ . '/site_blocker.php');
 
     // Sleep before fetching data from the active application
     sleep($refresh_interval);
