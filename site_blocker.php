@@ -40,7 +40,9 @@ while (true) {
         'chesscompass.com',
         'chesspuzzler.com',
         'chesskid.com',
-        'chessmood.com'
+        'chessmood.com',
+        'q3js.com',
+        'dos.zone'
     ];
     $blocked_websites = array_merge($blocked_websites, $always_blocked);
     $blocked_websites = array_unique($blocked_websites);
