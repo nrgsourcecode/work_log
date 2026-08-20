@@ -229,17 +229,14 @@ function set_immutable_flag(string $file_path)
     $command = "lsattr $file_path";
     $result = exec($command);
     if (strpos($result, '---i---')) {
-        // log_to_file('lsattr_result_before', $result);
         return;
     }
 
-    $command = "sudo chattr +i $file_path";
+    $command = "/usr/bin/chattr +i $file_path";
     $result = exec($command);
-    // log_to_file('immutable_flag_result', $result);
 
     $command = "lsattr $file_path";
     $result = exec($command);
-    // log_to_file('lsattr_result_after', $result);
 }
 
 function get_idle_time_in_seconds(): float
@@ -273,7 +270,7 @@ while (true) {
     $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
     $site_blocker_status = exec($command);
     if ($site_blocker_status == 'inactive') {
-        $command = 'sudo service site_blocker start';
+        $command = 'sudo /usr/sbin/service site_blocker start';
         exec($command);
     }
 

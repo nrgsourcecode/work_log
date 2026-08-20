@@ -5,7 +5,7 @@ pcntl_signal(SIGINT, 'signal_handler');
 pcntl_signal(SIGTERM, 'signal_handler');
 pcntl_signal(SIGHUP, 'signal_handler');
 
-function signal_handler($signal)
+function signal_handler(int $signal)
 {
     switch ($signal) {
         case SIGINT:
@@ -100,7 +100,7 @@ function check_hosts(array $websites)
     file_put_contents($hosts_file, $hosts_contents);
 }
 
-function build_hosts_line($website, $add_www = true)
+function build_hosts_line(string $website, bool $add_www = true)
 {
     $result = "\n127.0.0.1\t" . $website;
     if ($add_www) {
