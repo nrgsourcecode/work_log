@@ -1,6 +1,9 @@
 <?php
 
 require_once __DIR__ . '/chrome_url_bridge.php';
+require_once __DIR__ . '/Settings.php';
+require_once __DIR__ . '/Logger.php';
+
 start_server();
 
 $application_path = '';
@@ -119,7 +122,7 @@ function get_window_details(): array|false
     return $result;
 }
 
-function idle_window_details($window_details)
+function idle_window_details(array $window_details)
 {
     $window_details['activity_id'] = 1;
     $window_details['window_title'] = 'COMPUTER_IS_IDLE';
@@ -189,7 +192,7 @@ function handle_code(&$window_details, $window_title)
     $window_details['file_path'] = $title_array[0];
 }
 
-function get_application_details($process_id): false|array
+function get_application_details(int $process_id): false|array
 {
     $process_information = [];
     exec("ps aux | grep $process_id", $process_information);
@@ -262,9 +265,7 @@ function get_idle_time_in_seconds(): float
 
 while (true) {
 
-    // Read settings
-    $settings_path = __DIR__ . '/settings.json';
-    $settings = json_decode(file_get_contents($settings_path), true);
+    $settings = Settings::loadSettings();
     extract($settings);
 
     $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
@@ -280,7 +281,15 @@ while (true) {
     // Sleep before fetching data from the active application
     sleep($refresh_interval);
 
-    $date = date('Y-m-d');
+    $timezone = new DateTimeZone('Europe/Belgrade');
+    $date_time = new DateTime('now', $timezone);
+
+    if ((int) $date_time->format('H') < 5) {
+        $date_time->modify('-1 day');
+    }
+
+    $date = $date_time->format('Y-m-d');
+
     $application_path = '';
     $application_id = null;
 
@@ -581,25 +590,8 @@ function notify($title, $subtitle = null, $icon = null)
     exec($command);
 }
 
-function log_file_path()
-{
-    return dirname(__FILE__) . '/work_log.txt';
-}
-
 function handle_error(string $error)
 {
-    log_to_file('Error', $error, true);
+    Logger::log('Error', $error, true);
     notify('An error occurred', $error, 'error');
-}
-
-function log_to_file(string $variable_name, array|string $value, bool $force = false)
-{
-    global $enable_logging;
-
-    if (!$enable_logging && !$force) {
-        return;
-    }
-
-    $output = (is_array($value) ? json_encode($value) : (string)$value);
-    file_put_contents(log_file_path(), "\n\n" . date('Y-m-d H:i:s') . "\n$variable_name:\n$output", FILE_APPEND);
 }

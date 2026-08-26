@@ -1,9 +1,13 @@
 <?php
 
+require_once __DIR__ . '/Settings.php';
+require_once __DIR__ . '/Logger.php';
+
 register_shutdown_function('check_shutdown_type');
 pcntl_signal(SIGINT, 'signal_handler');
 pcntl_signal(SIGTERM, 'signal_handler');
 pcntl_signal(SIGHUP, 'signal_handler');
+pcntl_async_signals(true);
 
 function signal_handler(int $signal)
 {
@@ -11,7 +15,7 @@ function signal_handler(int $signal)
         case SIGINT:
         case SIGTERM:
         case SIGHUP:
-            echo "Caught signal: $signal" . PHP_EOL;
+            Logger::log('signal', "Caught signal: $signal");
             check_shutdown_type();
             exit;
     }
@@ -21,9 +25,7 @@ while (true) {
 
     $cycle_start_time = microtime(true);
 
-    // Read settings
-    $settings_path = __DIR__ . '/settings.json';
-    $settings = json_decode(file_get_contents($settings_path), true);
+    $settings = Settings::loadSettings();
     extract($settings);
 
     if (!is_array($blocked_websites)) {
@@ -57,17 +59,18 @@ function check_shutdown_type()
 {
     $output = shell_exec('runlevel');
 
-    if ($output) {
-        $runlevel = trim(explode(' ', $output)[1]);
+    if (!$output) {
+        Logger::log('shutdown_type', 'Unable to determine shutdown type.');
+        return;
+    }
 
-        if (in_array($runlevel, ['0', '1', '6'])) {
-            echo "Service is stopping due to system shutdown or reboot." . PHP_EOL;
-        } else {
-            echo "Service was stopped manually by the user." . PHP_EOL;
-            shell_exec('shutdown -h now');
-        }
+    $runlevel = trim(explode(' ', $output)[1]);
+
+    if (in_array($runlevel, ['0', '1', '6'])) {
+        Logger::log('shutdown_type', "Service is stopping due to system shutdown or reboot, runlevel: $runlevel.");
     } else {
-        echo "Unable to determine shutdown type." . PHP_EOL;
+        Logger::log('shutdown_type', "Service was stopped manually by the user, runlevel: $runlevel.");
+        shell_exec('shutdown -h now');
     }
 }
 
