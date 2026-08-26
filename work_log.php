@@ -275,7 +275,7 @@ while (true) {
         exec($command);
     }
 
-    set_immutable_flag($settings_path);
+    set_immutable_flag(Settings::$settings_path);
     set_immutable_flag(__DIR__ . '/site_blocker.php');
 
     // Sleep before fetching data from the active application
