@@ -1,161 +1,169 @@
 <?php
 
 require_once __DIR__ . '/chrome_url_bridge.php';
-require_once __DIR__ . '/Settings.php';
-require_once __DIR__ . '/Logger.php';
+require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/check_settings_window.php';
 
-start_server();
+startServer();
 
-$application_path = '';
-$total_seconds_tracked = 0;
-$program_start_time = microtime(true);
-$microtime = $program_start_time;
-$window_details_template = [
-    'application_id' => null,
-    'activity_id' => null,
-    'project_id' => null,
-    'task_id' => null,
-    'window_title' => null,
-    'file_path' => null,
-    'window_url' => null
-];
+$applicationPath = '';
+$totalSecondsTracked = 0;
+$programStartTime = microtime(true);
+$microtime = $programStartTime;
 
-function get_all_window_details(): array|false
+function getAllWindowDetails(): array|false
 {
     $output = [];
-    $result_code = 0;
+    $resultCode = 0;
     $command = 'gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/Windows --method org.gnome.Shell.Extensions.Windows.List 2>/dev/null';
-    exec($command, $output, $result_code);
-    if ($result_code !== 0) {
+    exec($command, $output, $resultCode);
+    if ($resultCode !== 0) {
         return false;
     }
 
-    $output_string = implode("\n", $output);
+    $outputString = implode("\n", $output);
 
-    if (strlen($output_string) < 5) {
-        handle_error("Window list command output too short $output_string");
+    if (strlen($outputString) < 5) {
+        handleError("Window list command output too short $outputString");
         return false;
     }
 
-    $trimmed_command_output = substr($output_string, 2, -3);
-    if (substr($trimmed_command_output, 2, 1) === '\\') {
-        $trimmed_command_output = json_decode('"' . $trimmed_command_output . '"');
+    $trimmedCommandOutput = substr($outputString, 2, -3);
+    if (substr($trimmedCommandOutput, 2, 1) === '\\') {
+        $trimmedCommandOutput = json_decode('"' . $trimmedCommandOutput . '"');
     }
-    $trimmed_command_output = str_replace('\\\\', '\\', $trimmed_command_output);
+    $trimmedCommandOutput = str_replace('\\\\', '\\', $trimmedCommandOutput);
 
-    $all_window_details = json_decode($trimmed_command_output, true);
+    $allWindowDetails = json_decode($trimmedCommandOutput, true);
 
-    if (is_null($all_window_details)) {
-        handle_error("Failed to decode JSON from window list\nCommand output: $output_string\nError: " . json_last_error_msg());
+    if (is_null($allWindowDetails)) {
+        handleError("Failed to decode JSON from window list\nCommand output: $outputString\nError: " . json_last_error_msg());
         return false;
     }
 
-    return $all_window_details;
+    return $allWindowDetails;
 }
 
-function get_window_details(): array|false
+function getWindowDetails(): array|false
 {
-    global $window_details_template;
-    global $idle_timeout_seconds;
+    global $settings;
+    global $applicationPath;
 
-    $result = $window_details_template;
+    $result = [
+        'application_id' => null,
+        'activity_id' => null,
+        'project_id' => null,
+        'task_id' => null,
+        'window_title' => null,
+        'file_path' => null,
+        'window_url' => null
+    ];
 
-    $all_windows_details = get_all_window_details();
-    if ($all_windows_details === false) {
-        return idle_window_details($result);
+    $allWindowsDetails = getAllWindowDetails();
+    if ($allWindowsDetails === false) {
+        return idleWindowDetails($result);
     }
 
-    $focused_window_details = array_find($all_windows_details, function ($window_details) {
-        return $window_details['focus'] == 1;
+    $focusedWindowDetails = array_find($allWindowsDetails, function ($windowDetails) {
+        return $windowDetails['focus'] == 1;
     });
 
-    if (empty($focused_window_details)) {
-        return idle_window_details($result);
+    if (empty($focusedWindowDetails)) {
+        return idleWindowDetails($result);
     }
 
-    if (get_idle_time_in_seconds() > $idle_timeout_seconds) {
-        return idle_window_details($result);
+    if (getIdleTimeInSeconds() > $settings['idleTimeoutSeconds']) {
+        return idleWindowDetails($result);
     }
 
-    $active_process_id = $focused_window_details['pid'];
-    $wm_class = $focused_window_details['wm_class'];
+    $activeProcessId = $focusedWindowDetails['pid'];
 
-    $application_details = get_application_details($active_process_id);
+    $applicationDetails = getApplicationDetails($activeProcessId);
 
-    if (empty($application_details)) {
-        handle_error('Failed to get application details for process id ' . $active_process_id);
+    if (empty($applicationDetails)) {
+        handleError('Failed to get application details for process id ' . $activeProcessId);
         return false;
     }
 
-    $application_id = $application_details['id'];
-    $application_path = $application_details['path'];
+    $applicationId = $applicationDetails['id'];
+    $applicationPath = $applicationDetails['path'];
 
-    $result['application_id'] = $application_id;
+    $result['application_id'] = $applicationId;
 
-    $patterns = fetch_patterns($application_id, $application_path);
+    $patterns = fetchPatterns($applicationId, $applicationPath);
     if ($patterns === false) {
-        handle_error('Failed to fetch patterns for application id ' . $application_id);
+        handleError('Failed to fetch patterns for application id ' . $applicationId);
         return false;
     }
 
-    $window_title = $focused_window_details['title'];
-    $first_letter = mb_substr($window_title, 0, 1);
+    $windowTitle = $focusedWindowDetails['title'];
+    $firstLetter = mb_substr($windowTitle, 0, 1);
 
-    $window_title = mb_substr($window_title, 0, 512);
+    $windowTitle = mb_substr($windowTitle, 0, 512);
 
-    if ($first_letter == '●' || $first_letter == '*') {
-        $window_title = trim(mb_substr($window_title, 1));
+    if ($firstLetter == '●' || $firstLetter == '*') {
+        $windowTitle = trim(mb_substr($windowTitle, 1));
     }
 
-    if (strpos($application_path, 'dbeaver')) {
-        handle_dbeaver($window_title);
-    } else if (strpos($application_path, 'chrome/chrome')) {
-        handle_chrome($result, $window_title);
-    } else if (strpos($application_path, 'code/code') || strpos($application_path, 'mount_Cursor')) {
-        handle_code($result, $window_title);
+    if ($applicationPath == '/usr/bin/gnome-control-center' && $windowTitle === 'Settings') {
+        $map = [
+            ['role' => 'window', 'name' => 'Settings'],
+            ['role' => 'group', 'name' => 'System'],
+            ['role' => 'group', 'name' => 'Users'],
+            ['role' => 'group', 'name' => 'Add User']
+        ];
+        getWindowTreeByPid($activeProcessId, $map);
     }
 
-    $result['window_title'] = $window_title;
+    if (strpos($applicationPath, 'dbeaver')) {
+        handleDbeaver($windowTitle);
+    } else if (strpos($applicationPath, 'chrome/chrome')) {
+        handleChrome($result, $windowTitle);
+    } else if (strpos($applicationPath, 'code/code') || strpos($applicationPath, 'mount_Cursor')) {
+        handleCode($result, $windowTitle);
+    }
 
-    apply_matched_pattern($result, $patterns);
+    $result['window_title'] = $windowTitle;
+
+    applyMatchedPattern($result, $patterns);
 
     return $result;
 }
 
-function idle_window_details(array $window_details)
+function idleWindowDetails(array $windowDetails)
 {
-    $window_details['activity_id'] = 1;
-    $window_details['window_title'] = 'COMPUTER_IS_IDLE';
-    return $window_details;
+    $windowDetails['activity_id'] = 1;
+    $windowDetails['window_title'] = 'COMPUTER_IS_IDLE';
+    return $windowDetails;
 }
 
-function fetch_patterns($application_id, $application_path): array|false
+function fetchPatterns(int|null $applicationId, string $applicationPath): array|false
 {
     $patterns = [];
     $sql = "SELECT * FROM patterns ORDER BY sort_order, id";
-    $data = select_query($sql);
+    $data = selectQuery($sql);
     if ($data === false) {
         return false;
     }
 
     foreach ($data as $row) {
         $pattern = $row;
-        if (value_matched($application_path, $pattern['application_path'])) {
-            $pattern['application_id'] = $application_id;
+        if (valueMatched($applicationPath, $pattern['application_path'])) {
+            $pattern['application_id'] = $applicationId;
             $patterns[] = $pattern;
         }
     }
     return $patterns;
 }
 
-function apply_matched_pattern(&$window_details, $patterns)
+function applyMatchedPattern(array &$windowDetails, array $patterns)
 {
     foreach ($patterns as $pattern) {
-        if (pattern_matched($window_details, $pattern)) {
-            foreach ($window_details as $field => $value) {
-                $pattern_value = $pattern[$field];
+        if (patternMatched($windowDetails, $pattern)) {
+            foreach ($windowDetails as $field => $value) {
+                $patternValue = $pattern[$field];
                 if (is_null($value) || $pattern['override_matched_details']) {
-                    $window_details[$field] = $pattern_value;
+                    $windowDetails[$field] = $patternValue;
                 }
             }
             break;
@@ -163,149 +171,152 @@ function apply_matched_pattern(&$window_details, $patterns)
     }
 }
 
-function handle_dbeaver(string &$window_title)
+function handleDbeaver(string &$windowTitle)
 {
-    if (!$dash_position = strpos($window_title, ' - ')) {
+    if (!$dashPosition = strpos($windowTitle, ' - ')) {
         return;
     }
 
-    $window_title = 'DBeaver' . substr($window_title, $dash_position);
+    $windowTitle = 'DBeaver' . substr($windowTitle, $dashPosition);
 }
 
 
-function handle_chrome(array &$window_details, string &$window_title)
+function handleChrome(array &$windowDetails, string &$windowTitle)
 {
 
-    if (!$window_url = get_chrome_url()) {
-        $window_title = 'PRIVATE_BROWSING';
+    if (!$windowUrl = getChromeUrl()) {
+        $windowTitle = 'PRIVATE_BROWSING';
         return;
     }
 
-    $window_url = explode('&', $window_url)[0];
-    $window_url = mb_substr($window_url, 0, 512);
-    $window_details['window_url'] = $window_url;
+    $windowUrl = explode('&', $windowUrl)[0];
+    $windowUrl = mb_substr($windowUrl, 0, 512);
+    $windowDetails['window_url'] = $windowUrl;
 }
 
-function handle_code(&$window_details, $window_title)
+function handleCode(array &$windowDetails, string $windowTitle)
 {
-    $title_array = explode(' • ', $window_title);
-    $window_details['file_path'] = $title_array[0];
+    $titleArray = explode(' • ', $windowTitle);
+    $windowDetails['file_path'] = $titleArray[0];
 }
 
-function get_application_details(int $process_id): false|array
+function getApplicationDetails(int $processId): false|array
 {
-    $process_information = [];
-    exec("ps aux | grep $process_id", $process_information);
+    $processInformation = [];
+    exec("ps aux | grep $processId", $processInformation);
 
-    foreach ($process_information as $line) {
+    foreach ($processInformation as $line) {
         $line = preg_replace('!\s+!', ' ', $line);
-        $line_array = explode(' ', $line);
-        if ($line_array[1] != $process_id) {
+        $lineArray = explode(' ', $line);
+        if ($lineArray[1] != $processId) {
             continue;
         }
 
-        $application_path = $line_array[10];
+        $applicationPath = $lineArray[10];
 
-        $sql = "SELECT `id` FROM applications WHERE `path` = '$application_path'";
-        $data = select_query($sql);
+        $sql = "SELECT `id` FROM applications WHERE `path` = '$applicationPath'";
+        $data = selectQuery($sql);
 
         if ($data === false) {
             return false;
         }
 
-        if (!$application_id = $data[0]['id'] ?? null) {
-            $sql = "INSERT INTO applications(`path`) VALUES ('$application_path')";
-            $application_id = insert_query($sql);
+        if (!$applicationId = $data[0]['id'] ?? null) {
+            $sql = "INSERT INTO applications(`path`) VALUES ('$applicationPath')";
+            $applicationId = insertQuery($sql);
         }
 
         return [
-            'id' => $application_id,
-            'path' => $application_path
+            'id' => $applicationId,
+            'path' => $applicationPath
         ];
     }
 
     return false;
 }
 
-function set_immutable_flag(string $file_path)
+function setImmutableFlag(string $filePath)
 {
-    $command = "lsattr $file_path";
+    $command = "lsattr $filePath";
     $result = exec($command);
     if (strpos($result, '---i---')) {
         return;
     }
 
-    $command = "/usr/bin/chattr +i $file_path";
+    $command = "/usr/bin/chattr +i $filePath";
     $result = exec($command);
 
-    $command = "lsattr $file_path";
+    $command = "lsattr $filePath";
     $result = exec($command);
 }
 
-function get_idle_time_in_seconds(): float
+function getIdleTimeInSeconds(): float
 {
     $output = [];
-    $result_code = 0;
+    $resultCode = 0;
     $command = 'gdbus call --session --dest org.gnome.Mutter.IdleMonitor --object-path /org/gnome/Mutter/IdleMonitor/Core --method org.gnome.Mutter.IdleMonitor.GetIdletime 2>/dev/null';
-    exec($command, $output, $result_code);
+    exec($command, $output, $resultCode);
 
-    if ($result_code !== 0) {
+    if ($resultCode !== 0) {
         return 0;
     }
 
-    $output_string = implode("\n", $output);
-    if (strlen($output_string) < 5) {
-        handle_error("Window list command output too short $output_string");
+    $outputString = implode("\n", $output);
+    if (strlen($outputString) < 5) {
+        handleError("Window list command output too short $outputString");
         return 0;
     }
 
-    $time_in_milliseconds = (float) substr($output_string, 8, -2);
-    return $time_in_milliseconds / 1000;
+    $timeInMilliseconds = (float) substr($outputString, 8, -2);
+    return $timeInMilliseconds / 1000;
 }
 
-while (true) {
+function trackWindowDetails()
+{
+    global $settings;
+    global $totalSecondsTracked;
+    global $programStartTime;
+    global $applicationPath;
+    global $microtime;
 
     $settings = Settings::loadSettings();
-    extract($settings);
 
-    $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
-    $site_blocker_status = exec($command);
-    if ($site_blocker_status == 'inactive') {
-        $command = 'sudo /usr/sbin/service site_blocker start';
-        exec($command);
+    // $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
+    // $siteBlockerStatus = exec($command);
+    // if ($siteBlockerStatus == 'inactive') {
+    //     $command = 'sudo /usr/sbin/service site_blocker start';
+    //     exec($command);
+    // }
+
+    // set_immutable_flag(Settings::$settingsPath);
+    // set_immutable_flag(__DIR__ . '/site_blocker.php');
+
+    sleep($settings['refreshInterval']);
+
+    $timezone = new DateTimeZone($settings['timezone']);
+    $dateTime = new DateTime('now', $timezone);
+
+    if ($dateTime->format('H:i') < $settings['workdayStart']) {
+        $dateTime->modify('-1 day');
     }
 
-    set_immutable_flag(Settings::$settings_path);
-    set_immutable_flag(__DIR__ . '/site_blocker.php');
+    $date = $dateTime->format('Y-m-d');
 
-    // Sleep before fetching data from the active application
-    sleep($refresh_interval);
+    $applicationPath = '';
 
-    $timezone = new DateTimeZone('Europe/Belgrade');
-    $date_time = new DateTime('now', $timezone);
-
-    if ((int) $date_time->format('H') < 5) {
-        $date_time->modify('-1 day');
+    $windowDetails = getWindowDetails();
+    if ($windowDetails === false) {
+        return;
     }
 
-    $date = $date_time->format('Y-m-d');
-
-    $application_path = '';
-    $application_id = null;
-
-    $window_details = get_window_details();
-    if ($window_details === false) {
-        continue;
-    }
-
-    $window_detail_id = null;
+    $windowDetailId = null;
 
     $sql = "SELECT * FROM window_details WHERE ";
-    $insert_fields_sql = '';
-    $insert_values_sql = '';
+    $insertFieldsSql = '';
+    $insertValuesSql = '';
     $counter = 0;
-    $search_counter = 0;
-    foreach ($window_details as $field => $value) {
+    $searchCounter = 0;
+    foreach ($windowDetails as $field => $value) {
         if (is_null($value)) {
             continue;
         }
@@ -315,163 +326,171 @@ while (true) {
         }
 
         if (strpos($field, '_id') === false) {
-            $sql .= ($search_counter ? ' AND ' : '') . $field . ' = ' . $value;
-            $search_counter++;
+            $sql .= ($searchCounter ? ' AND ' : '') . $field . ' = ' . $value;
+            $searchCounter++;
         }
 
-        $insert_fields_sql .= ($counter ? ', ' : '') . $field;
-        $insert_values_sql .= ($counter ? ', ' : '') . $value;
+        $insertFieldsSql .= ($counter ? ', ' : '') . $field;
+        $insertValuesSql .= ($counter ? ', ' : '') . $value;
         $counter++;
     }
 
-    $data = select_query($sql);
+    $data = selectQuery($sql);
     if ($data === false) {
-        continue;
+        return;
     }
 
 
     if ($row = $data[0] ?? null) {
-        $window_detail_id = $row['id'];
+        $windowDetailId = $row['id'];
 
-        foreach ($window_details as $field => $value) {
+        foreach ($windowDetails as $field => $value) {
             if (empty($value)) {
-                $row_value = $row[$field] ?? null;
-                if (!empty($row_value)) {
-                    $window_details[$field] = $row_value;
+                $rowValue = $row[$field] ?? null;
+                if (!empty($rowValue)) {
+                    $windowDetails[$field] = $rowValue;
                 }
             }
         }
     } else {
 
-        $sql = "INSERT INTO window_details ($insert_fields_sql) VALUES ($insert_values_sql)";
-        $window_detail_id = insert_query($sql);
+        $sql = "INSERT INTO window_details ($insertFieldsSql) VALUES ($insertValuesSql)";
+        $windowDetailId = insertQuery($sql);
 
-        if ($window_detail_id === false) {
-            continue;
+        if ($windowDetailId === false) {
+            return;
         }
     }
 
-    $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $window_detail_id AND `date` = '$date'";
-    $data = select_query($sql);
+    $sql = "SELECT `id` FROM `activity_log` WHERE `window_detail_id` = $windowDetailId AND `date` = '$date'";
+    $data = selectQuery($sql);
 
     if ($data === false) {
-        continue;
+        return;
     }
 
     $microtime = microtime(true);
-    $total_seconds_passed = round($microtime - $program_start_time, 3);
-    $seconds_to_track = round($total_seconds_passed - $total_seconds_tracked, 3);
-    $total_seconds_tracked += $seconds_to_track;
-    check_upwork($window_details['project_id']);
+    $totalSecondsPassed = round($microtime - $programStartTime, 3);
+    $secondsToTrack = round($totalSecondsPassed - $totalSecondsTracked, 3);
+    $totalSecondsTracked += $secondsToTrack;
+    checkUpwork($windowDetails['project_id']);
 
     if ($id = $data[0]['id'] ?? null) {
-        $sql = "UPDATE activity_log SET `seconds` = `seconds` + $seconds_to_track WHERE `id` = $id";
+        $sql = "UPDATE activity_log SET `seconds` = `seconds` + $secondsToTrack WHERE `id` = $id";
         query($sql);
-        continue;
+        return;
     }
 
-    $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($window_detail_id, '$date', $seconds_to_track)";
-    insert_query($sql);
+    $sql = "INSERT INTO `activity_log` (`window_detail_id`, `date`, `seconds`) VALUES ($windowDetailId, '$date', $secondsToTrack)";
+    insertQuery($sql);
 }
 
-function is_time_tracked_in_upwork_window($upwork_process_id, $title, $x, $y)
+while (true) {
+    trackWindowDetails();
+}
+
+function isTimeTrackedInUpworkWindow(int $upworkProcessId, string $title, int $x, int $y)
 {
-    $control_panel_window_ids = [];
+    $controlPanelWindowIds = [];
     $command = "xdotool search --name '$title'";
-    exec($command, $control_panel_window_ids);
+    exec($command, $controlPanelWindowIds);
 
-    if (count($control_panel_window_ids) > 1) {
-        $upwork_window_ids = [];
-        $command = "xdotool search --pid $upwork_process_id";
-        exec($command, $upwork_window_ids);
-        $control_panel_window_ids = array_intersect($control_panel_window_ids, $upwork_window_ids);
+    if (count($controlPanelWindowIds) > 1) {
+        $upworkWindowIds = [];
+        $command = "xdotool search --pid $upworkProcessId";
+        exec($command, $upworkWindowIds);
+        $controlPanelWindowIds = array_intersect($controlPanelWindowIds, $upworkWindowIds);
     }
 
-    $window_id = array_pop($control_panel_window_ids);
-    $command = "import -silent -windowid $window_id -crop 1x1+$x+$y txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
-    $toggle_color = exec($command);
-    return $toggle_color === '#10108A8A0000';
+    $windowId = array_pop($controlPanelWindowIds);
+    $command = "import -silent -windowid $windowId -crop 1x1+$x+$y txt:- | grep -oP '#[0-9A-Fa-f]{12}'";
+    $toggleColor = exec($command);
+    return $toggleColor === '#10108A8A0000';
 }
 
-function is_time_tracked()
+function isTimeTracked()
 {
-    $upwork_processes = [];
+    $upworkProcesses = [];
     $command = 'ps aux | pgrep upwork';
-    exec($command, $upwork_processes);
+    exec($command, $upworkProcesses);
 
-    $upwork_process_id = $upwork_processes[0] ?? null;
-    if (!$upwork_process_id) {
+    $upworkProcessId = $upworkProcesses[0] ?? null;
+    if (!$upworkProcessId) {
         return false;
     }
 
     $result =
-        is_time_tracked_in_upwork_window($upwork_process_id, 'Time Tracker', 305, 105) ||
-        is_time_tracked_in_upwork_window($upwork_process_id, 'Control Panel', 40, 40);
+        isTimeTrackedInUpworkWindow($upworkProcessId, 'Time Tracker', 305, 105) ||
+        isTimeTrackedInUpworkWindow($upworkProcessId, 'Control Panel', 40, 40);
 
     return $result;
 }
 
-function check_upwork($project_id)
+function checkUpwork(int|null $projectId)
 {
-    global $upwork_enabled_project_ids;
-    global $application_path;
-
-    $is_upwork_active = strpos($application_path, 'Upwork/upwork');
-    if ($is_upwork_active) {
+    if ($projectId === null) {
         return;
     }
 
-    $should_track_time = in_array($project_id, $upwork_enabled_project_ids);
-    $is_time_tracked = is_time_tracked();
+    global $settings;
+    global $applicationPath;
 
-    $notification_text = null;
+    $isUpworkActive = strpos($applicationPath, 'Upwork/upwork');
+    if ($isUpworkActive) {
+        return;
+    }
+
+    $shouldTrackTime = in_array($projectId, $settings['upworkEnabledProjectIds']);
+    $isTimeTracked = isTimeTracked();
+
+    $notificationText = null;
     $icon = null;
     $subtitle = null;
 
-    if ($should_track_time) {
-        if (!$is_time_tracked) {
-            $notification_text = 'Start upwork timer';
+    if ($shouldTrackTime) {
+        if (!$isTimeTracked) {
+            $notificationText = 'Start upwork timer';
             $icon = 'start';
         }
-    } else if ($is_time_tracked) {
-        $notification_text = 'Stop upwork timer';
+    } else if ($isTimeTracked) {
+        $notificationText = 'Stop upwork timer';
         $icon = 'stop';
     }
 
-    $theme_changed = set_theme($notification_text !== null);
+    $themeChanged = setTheme($notificationText !== null);
 
-    if (!$notification_text || !$theme_changed) {
+    if (!$notificationText || !$themeChanged) {
         return;
     }
 
-    notify($notification_text, $subtitle, $icon);
+    notify($notificationText, $subtitle, $icon);
 }
 
-function set_theme($error = false)
+function setTheme($error = false)
 {
     $command = 'gsettings get org.gnome.shell.extensions.user-theme name';
-    $current_theme = trim(exec($command), "'");
+    $currentTheme = trim(exec($command), "'");
 
-    $new_theme = 'work-log-' . ($error ? 'error' : 'regular');
+    $newTheme = 'work-log-' . ($error ? 'error' : 'regular');
 
-    if ($current_theme === $new_theme) {
+    if ($currentTheme === $newTheme) {
         return false;
     }
 
-    $command = "gsettings set org.gnome.shell.extensions.user-theme name \"'$new_theme'\"";
+    $command = "gsettings set org.gnome.shell.extensions.user-theme name \"'$newTheme'\"";
     exec($command);
     return true;
 }
 
-function pattern_matched($window_details, $pattern)
+function patternMatched(array $windowDetails, array $pattern)
 {
     $result = true;
-    foreach ($window_details as $field => $value) {
+    foreach ($windowDetails as $field => $value) {
         if (str_ends_with($field, '_id')) {
             continue;
         }
 
-        $result = $result && value_matched($value, $pattern[$field]);
+        $result = $result && valueMatched($value, $pattern[$field]);
 
         if (!$result) {
             break;
@@ -480,58 +499,56 @@ function pattern_matched($window_details, $pattern)
     return $result;
 }
 
-function value_matched($match_value, $pattern_value)
+function valueMatched($matchValue, $patternValue)
 {
-    if (empty($pattern_value)) {
+    if (empty($patternValue)) {
         return true;
     }
 
-    if (is_null($match_value)) {
+    if (is_null($matchValue)) {
         return false;
     }
 
     $result = true;
-    $match_left = substr($pattern_value, 0, 1) != '*';
-    if (!$match_left) {
-        $pattern_value = substr($pattern_value, 1);
+    $matchLeft = substr($patternValue, 0, 1) != '*';
+    if (!$matchLeft) {
+        $patternValue = substr($patternValue, 1);
     }
-    $match_right = substr($pattern_value, -1,) != '*';
-    if (!$match_right) {
-        $pattern_value = substr($pattern_value, 0, -1);
+    $matchRight = substr($patternValue, -1,) != '*';
+    if (!$matchRight) {
+        $patternValue = substr($patternValue, 0, -1);
     }
-    $match_any = !$match_left && !$match_right;
+    $matchAny = !$matchLeft && !$matchRight;
 
-    $pattern_index = strpos($match_value, $pattern_value);
+    $patternIndex = strpos($matchValue, $patternValue);
 
-    if ($match_any) {
-        $result = $result && $pattern_index !== false;
+    if ($matchAny) {
+        $result = $result && $patternIndex !== false;
     } else {
-        if ($match_left) {
-            $result = $result && $pattern_index === 0;
+        if ($matchLeft) {
+            $result = $result && $patternIndex === 0;
         }
 
-        if ($match_right) {
-            $result = $result && strrpos($match_value, $pattern_value) == strlen($match_value) - strlen($pattern_value);
+        if ($matchRight) {
+            $result = $result && strrpos($matchValue, $patternValue) == strlen($matchValue) - strlen($patternValue);
         }
     }
 
     return $result;
 }
 
-function query($sql, $insert = false): int|false|mysqli_result
+function query(string $sql, $insert = false): int|false|mysqli_result
 {
-    global $DB_HOST;
-    global $DB_USERNAME;
-    global $DB_PASSWORD;
-    global $DB_DATABASE;
+    global $settings;
 
     $connection = null;
 
     try {
-        $connection = new mysqli($DB_HOST, $DB_USERNAME, $DB_PASSWORD, $DB_DATABASE);
+        $dbSettings = $settings['db'];
+        $connection = new mysqli($dbSettings['host'], $dbSettings['username'], $dbSettings['password'], $dbSettings['database']);
         $resource = $connection->query($sql);
     } catch (mysqli_sql_exception $e) {
-        handle_error($e->getMessage());
+        handleError($e->getMessage());
         if ($connection) {
             $connection->close();
         }
@@ -539,21 +556,21 @@ function query($sql, $insert = false): int|false|mysqli_result
     }
 
     if ($insert) {
-        $last_inserted_id = $connection->insert_id;
+        $lastInsertedId = $connection->insert_id;
         $connection->close();
-        return $last_inserted_id;
+        return $lastInsertedId;
     }
 
     $connection->close();
     return $resource;
 }
 
-function insert_query($sql)
+function insertQuery(string $sql)
 {
     return query($sql, true);
 }
 
-function select_query($sql): array|false
+function selectQuery(string $sql): array|false
 {
     if (!$resource = query($sql)) {
         return false;
@@ -566,7 +583,7 @@ function select_query($sql): array|false
     return $result;
 }
 
-function notify($title, $subtitle = null, $icon = null)
+function notify(string $title, string|null $subtitle = null, string|null $icon = null)
 {
     $command = "notify-send -h int:transient:1";
 
@@ -590,7 +607,7 @@ function notify($title, $subtitle = null, $icon = null)
     exec($command);
 }
 
-function handle_error(string $error)
+function handleError(string $error)
 {
     Logger::log('Error', $error, true);
     notify('An error occurred', $error, 'error');

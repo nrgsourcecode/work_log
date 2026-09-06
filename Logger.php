@@ -11,10 +11,9 @@ class Logger
 
     public static function log(string $variableName, array|string $value, bool $force = false)
     {
-
         $settings = Settings::loadSettings();
 
-        if (!($settings['enable_logging'] ?? false) && !$force) {
+        if (!($settings['enableLogging'] ?? false) && !$force) {
             return;
         }
 

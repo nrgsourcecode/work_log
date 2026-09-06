@@ -1,11 +1,15 @@
 <?php
 
-$last_reboot = [];
-$reboot_history = [];
+$lastReboot = [];
+$rebootHistory = [];
+require_once __DIR__ . '/common.php';
 
-exec('last reboot', $last_reboot);
+$settings = Settings::loadSettings();
+$workdayStart = $settings['workdayStart'] ?? '05:00';
 
-foreach ($last_reboot as $line) {
+exec('last reboot', $lastReboot);
+
+foreach ($lastReboot as $line) {
 
     if (empty($line)) {
         break;
@@ -15,12 +19,12 @@ foreach ($last_reboot as $line) {
     $date = $columns[4] . ' ' . $columns[5] . ' ' . $columns[6];
     $time = $columns[7];
 
-    if ($time < '05:00') {
+    if ($time < $workdayStart) {
         continue;
     }
 
-    $reboot_history[$date] = "$date $time";
+    $rebootHistory[$date] = "$date $time";
 }
 
-$reboot_history = array_reverse(array_values($reboot_history));
-echo implode("\n", $reboot_history) . "\n";
+$rebootHistory = array_reverse(array_values($rebootHistory));
+echo implode("\n", $rebootHistory) . "\n";

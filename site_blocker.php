@@ -1,38 +1,18 @@
 <?php
 
-require_once __DIR__ . '/Settings.php';
-require_once __DIR__ . '/Logger.php';
-
-register_shutdown_function('check_shutdown_type');
-pcntl_signal(SIGINT, 'signal_handler');
-pcntl_signal(SIGTERM, 'signal_handler');
-pcntl_signal(SIGHUP, 'signal_handler');
-pcntl_async_signals(true);
-
-function signal_handler(int $signal)
-{
-    switch ($signal) {
-        case SIGINT:
-        case SIGTERM:
-        case SIGHUP:
-            Logger::log('signal', "Caught signal: $signal");
-            check_shutdown_type();
-            exit;
-    }
-}
+require_once __DIR__ . '/common.php';
+$initialBlockedWebsites = null;
 
 while (true) {
 
-    $cycle_start_time = microtime(true);
-
     $settings = Settings::loadSettings();
-    extract($settings);
+    $blockedWebsites = $settings['blockedWebsites'] ?? [];
 
-    if (!is_array($blocked_websites)) {
-        $blocked_websites = [];
+    if (!is_array($blockedWebsites)) {
+        $blockedWebsites = [];
     }
 
-    $always_blocked = [
+    $alwaysBlocked = [
         'chess.com',
         'lichess.org',
         'chesspuzzle.net',
@@ -46,67 +26,58 @@ while (true) {
         'q3js.com',
         'dos.zone'
     ];
-    $blocked_websites = array_merge($blocked_websites, $always_blocked);
-    $blocked_websites = array_unique($blocked_websites);
 
-    check_hosts($blocked_websites);
+    $blockedWebsites = array_merge($blockedWebsites, $alwaysBlocked);
+    $blockedWebsites = array_unique($blockedWebsites);
 
-    sleep($refresh_interval);
-    pcntl_signal_dispatch();
-}
-
-function check_shutdown_type()
-{
-    $output = shell_exec('runlevel');
-
-    if (!$output) {
-        Logger::log('shutdown_type', 'Unable to determine shutdown type.');
-        return;
+    if (is_null($initialBlockedWebsites)) {
+        $initialBlockedWebsites = $blockedWebsites;
     }
 
-    $runlevel = trim(explode(' ', $output)[1]);
-
-    if (in_array($runlevel, ['0', '1', '6'])) {
-        Logger::log('shutdown_type', "Service is stopping due to system shutdown or reboot, runlevel: $runlevel.");
-    } else {
-        Logger::log('shutdown_type', "Service was stopped manually by the user, runlevel: $runlevel.");
-        shell_exec('shutdown -h now');
+    $removedWebsites = array_diff($initialBlockedWebsites, $blockedWebsites);
+    if (!empty($removedWebsites)) {
+        Logger::log('hosts', 'Removed websites detected, reapplying block: ' . implode(', ', $removedWebsites));
+        $initialBlockedWebsites = $blockedWebsites;
     }
+
+    checkHosts($blockedWebsites);
+
+    sleep($settings['refreshInterval']);
 }
 
-function check_hosts(array $websites)
+function checkHosts(array $websites)
 {
 
-    $hosts_file = '/etc/hosts';
+    $hostsFile = '/etc/hosts';
 
-    $hosts_contents = file_get_contents($hosts_file);
+    $hostsContents = file_get_contents($hostsFile);
 
-    $block_contents = "\n# BLOCK MANAGED BY WORK_LOG\n# EVERYTHING BELOW THIS BLOCK WILL BE DELETED\n";
-    $first_line_start = strpos($hosts_contents, $block_contents);
+    $blockContents = "\n# BLOCK MANAGED BY WORK_LOG\n# EVERYTHING BELOW THIS BLOCK WILL BE DELETED\n";
+    $firstLineStart = strpos($hostsContents, $blockContents);
 
     foreach ($websites as $website) {
-        $block_contents .= build_hosts_line($website);
+        $blockContents .= buildHostsLine($website);
     }
 
-    $block_contents .= "\n# END BLOCK";
-    $block_start = strpos($hosts_contents, $block_contents);
-    if ($block_start !== false) {
+    $blockContents .= "\n# END BLOCK";
+    $blockStart = strpos($hostsContents, $blockContents);
+    if ($blockStart !== false) {
         return;
     }
 
-    if ($first_line_start === false) {
-        $hosts_contents .= $block_contents;
+    if ($firstLineStart === false) {
+        $hostsContents .= $blockContents;
     } else {
-        $hosts_contents = substr($hosts_contents, 0, $first_line_start) . $block_contents;
+        $hostsContents = substr($hostsContents, 0, $firstLineStart) . $blockContents;
     }
 
-    file_put_contents($hosts_file, $hosts_contents);
+    file_put_contents($hostsFile, $hostsContents);
 }
 
-function build_hosts_line(string $website, bool $add_www = true)
+function buildHostsLine(string $website, bool $addWww = true)
 {
     $result = "\n127.0.0.1\t" . $website;
-    if ($add_www) {
+    if ($addWww) {
         $result .= "\n127.0.0.1\twww." . $website;
     }
     return $result;
