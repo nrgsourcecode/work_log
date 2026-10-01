@@ -229,19 +229,16 @@ function getApplicationDetails(int $processId): false|array
     return false;
 }
 
-function setImmutableFlag(string $filePath)
+function setImmutableFlag(string $filePath): void
 {
-    $command = "lsattr $filePath";
-    $result = exec($command);
-    if (strpos($result, '---i---')) {
+    $output = [];
+    $exitCode = 0;
+    exec('/usr/bin/lsattr -d -- ' . escapeshellarg($filePath) . ' 2>/dev/null', $output, $exitCode);
+    if ($exitCode === 0 && isset($output[0][4]) && $output[0][4] === 'i') {
         return;
     }
 
-    $command = "/usr/bin/chattr +i $filePath";
-    $result = exec($command);
-
-    $command = "lsattr $filePath";
-    $result = exec($command);
+    exec('sudo /usr/bin/chattr +i -- ' . escapeshellarg($filePath) . ' 2>/dev/null');
 }
 
 function getIdleTimeInSeconds(): float
@@ -275,15 +272,21 @@ function trackWindowDetails()
 
     $settings = Settings::loadSettings();
 
-    $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
-    $siteBlockerStatus = exec($command);
-    if ($siteBlockerStatus == 'inactive') {
-        $command = 'sudo /usr/sbin/service site_blocker start';
-        exec($command);
+    $enableOutput = [];
+    $enableExitCode = 0;
+    exec('systemctl is-enabled site_blocker.service 2>/dev/null', $enableOutput, $enableExitCode);
+    if ($enableExitCode !== 0 || trim(implode("\n", $enableOutput)) !== 'enabled') {
+        exec('sudo /usr/bin/systemctl enable site_blocker.service 2>/dev/null');
+    }
+
+    $activeOutput = [];
+    $activeExitCode = 0;
+    exec('systemctl is-active site_blocker.service 2>/dev/null', $activeOutput, $activeExitCode);
+    if ($activeExitCode !== 0 || trim(implode("\n", $activeOutput)) !== 'active') {
+        exec('sudo /usr/bin/systemctl start site_blocker.service 2>/dev/null');
     }
 
     setImmutableFlag(Settings::$settingsPath);
-    setImmutableFlag(__DIR__ . '/site_blocker.php');
 
     sleep($settings['refreshInterval']);
 
