@@ -82,3 +82,104 @@ function buildHostsLine(string $website, bool $addWww = true)
     }
     return $result;
 }
+
+function snapshotFiles(): array
+{
+    $root = __DIR__;
+
+    $snapshot = [];
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(
+            $root,
+            FilesystemIterator::SKIP_DOTS
+        ),
+        RecursiveIteratorIterator::LEAVES_ONLY
+    );
+
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || $file->isLink()) {
+            continue;
+        }
+
+        $path = $file->getPathname();
+
+        $contents = file_get_contents($path);
+
+        if ($contents === false) {
+            continue;
+        }
+
+        $snapshot[$path] = $contents;
+    }
+
+    return $snapshot;
+}
+
+function isImmutable(string $path): bool
+{
+    $output = [];
+    $exitCode = 0;
+
+    exec(
+        'lsattr -d ' . escapeshellarg($path) . ' 2>/dev/null',
+        $output,
+        $exitCode
+    );
+
+    if ($exitCode !== 0 || empty($output)) {
+        return false;
+    }
+
+    return isset($output[0][4]) && $output[0][4] === 'i';
+}
+
+function makeImmutable(string $path): void
+{
+    exec(
+        'sudo chattr +i -- ' . escapeshellarg($path) . ' 2>/dev/null',
+        $output,
+        $exitCode
+    );
+}
+
+// $snapshot = snapshotFiles();
+
+// while (true) {
+//     sleep(10);
+
+//     foreach ($snapshot as $path => $originalContents) {
+//         if (!file_exists($path)) {
+//             file_put_contents($path, $originalContents);
+
+//             makeImmutable($path);
+
+//             continue;
+//         }
+
+//         $currentContents = file_get_contents($path);
+
+//         if ($currentContents === false) {
+//             continue;
+//         }
+
+//         if (!hash_equals(
+//             hash('sha256', $originalContents),
+//             hash('sha256', $currentContents)
+//         )) {
+//             if (isImmutable($path)) {
+//                 exec(
+//                     'chattr -i -- ' . escapeshellarg($path)
+//                 );
+//             }
+
+//             file_put_contents($path, $originalContents);
+
+//             makeImmutable($path);
+//         }
+
+//         if (!isImmutable($path)) {
+//             makeImmutable($path);
+//         }
+//     }
+// }

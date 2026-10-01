@@ -30,7 +30,7 @@ function checkSystemStatus()
 
     if (in_array($systemStatus, ['running', 'degrading'])) {
         Logger::log('system_status', "Service was stopped manually by the user, system_status: $systemStatus.");
-        // exec('shutdown -h now');
+        exec('shutdown -h now');
     } else {
         Logger::log('system_status', "Service is stopping due to system shutdown or reboot, system_status: $systemStatus.");
     }

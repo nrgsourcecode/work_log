@@ -84,11 +84,11 @@ function callAccessibilityMethod(
     return null;
 }
 
-function checkVisibleTree(string $busName, string $objectPath, int $depth = 0, array $map = []): void
+function isAddUserDialogOpen(string $busName, string $objectPath, int $depth = 0, array $map = []): bool
 {
     $stateRaw = callAccessibilityMethod($busName, $objectPath, 'org.a11y.atspi.Accessible', 'GetState');
     if ($stateRaw === null) {
-        return;
+        return false;
     }
 
     $states = extractStateInts($stateRaw);
@@ -99,7 +99,7 @@ function checkVisibleTree(string $busName, string $objectPath, int $depth = 0, a
     }
 
     if ($isElementVisible === false) {
-        return;
+        return false;
     }
 
     $nameRaw = callAccessibilityMethod($busName, $objectPath, 'org.freedesktop.DBus.Properties', 'Get', 'org.a11y.atspi.Accessible Name');
@@ -123,11 +123,16 @@ function checkVisibleTree(string $busName, string $objectPath, int $depth = 0, a
     $nextMap = $map;
 
     if ($elementName !== '') {
+
+        if ($roleName === 'group' && $elementName === 'Add User') {
+            return true;
+        }
+
         $mapElement = $map[0];
         if ($mapElement['role'] === $roleName && $mapElement['name'] === $elementName) {
             array_shift($nextMap);
         } else {
-            return;
+            return false;
         }
         echo str_repeat("  ", $depth) . "[{$roleName}] {$elementName}\n";
     }
@@ -144,9 +149,12 @@ function checkVisibleTree(string $busName, string $objectPath, int $depth = 0, a
         if ($childRaw !== null && preg_match("/['\"]([^'\"]*)['\"],\s*(?:objectpath\s+)?['\"]([^'\"]*)['\"]/", $childRaw, $childMatches)) {
             $childBusName = $childMatches[1];
             $childObjectPath = $childMatches[2];
-            checkVisibleTree($childBusName, $childObjectPath, $depth + 1, $nextMap ?? []);
+            if (isAddUserDialogOpen($childBusName, $childObjectPath, $depth + 1, $nextMap ?? [])) {
+                return true;
+            }
         }
     }
+    return false;
 }
 
 function extractSingleInt(string $raw): ?int
@@ -214,21 +222,32 @@ function findWindowInApp(string $appBusName, string $appObjectPath): ?array
     return null;
 }
 
-function getWindowTreeByPid(int $pid, array $map): void
+function closeAddUser(int $pid): void
 {
     $app = findApplicationByPid($pid);
+
     if ($app === null) {
         return;
     }
+
+    $map = [
+        ['role' => 'window', 'name' => 'Settings']
+    ];
+
     [$appBusName, $appObjectPath] = $app;
 
     $window = findWindowInApp($appBusName, $appObjectPath);
+
     if ($window === null) {
         return;
     }
+
     [$windowBusName, $windowObjectPath] = $window;
 
-    checkVisibleTree($windowBusName, $windowObjectPath, 0, $map);
+    if (isAddUserDialogOpen($windowBusName, $windowObjectPath, 0, $map)) {
+        $command = 'kill ' . escapeshellarg((string)$pid);
+        exec($command);
+    }
 }
 
 function getActiveWindowTree(): void
@@ -291,7 +310,7 @@ function getActiveWindowTree(): void
                 }
 
                 echo "--- Accerciser Dump for: {$windowName} ---\n";
-                checkVisibleTree($windowBusName, $windowObjectPath);
+                isAddUserDialogOpen($windowBusName, $windowObjectPath);
                 return;
             }
         }

@@ -106,13 +106,7 @@ function getWindowDetails(): array|false
     }
 
     if ($applicationPath == '/usr/bin/gnome-control-center' && $windowTitle === 'Settings') {
-        $map = [
-            ['role' => 'window', 'name' => 'Settings'],
-            ['role' => 'group', 'name' => 'System'],
-            ['role' => 'group', 'name' => 'Users'],
-            ['role' => 'group', 'name' => 'Add User']
-        ];
-        getWindowTreeByPid($activeProcessId, $map);
+        closeAddUser($activeProcessId);
     }
 
     if (strpos($applicationPath, 'dbeaver')) {
@@ -281,15 +275,15 @@ function trackWindowDetails()
 
     $settings = Settings::loadSettings();
 
-    // $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
-    // $siteBlockerStatus = exec($command);
-    // if ($siteBlockerStatus == 'inactive') {
-    //     $command = 'sudo /usr/sbin/service site_blocker start';
-    //     exec($command);
-    // }
+    $command = 'service site_blocker status | grep "Active:" | awk \'{print $2}\'';
+    $siteBlockerStatus = exec($command);
+    if ($siteBlockerStatus == 'inactive') {
+        $command = 'sudo /usr/sbin/service site_blocker start';
+        exec($command);
+    }
 
-    // set_immutable_flag(Settings::$settingsPath);
-    // set_immutable_flag(__DIR__ . '/site_blocker.php');
+    setImmutableFlag(Settings::$settingsPath);
+    setImmutableFlag(__DIR__ . '/site_blocker.php');
 
     sleep($settings['refreshInterval']);
 
